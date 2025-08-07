@@ -271,7 +271,7 @@ def create_hero_section():
                                 style={"fontWeight": "700", "textShadow": "2px 2px 4px rgba(0,0,0,0.3)"}),
                         html.P(
                             "Empowering data-driven decision making through comprehensive analysis and transparent reporting",
-                            className="lead text-white mb-4",
+                            className="text-white mb-4",
                             style={"fontSize": "1.3rem", "textShadow": "1px 1px 2px rgba(0,0,0,0.3)"}),
                         html.P(
                             "Supporting USC's mission of transforming ordinary people into extraordinary servants of God through evidence-based insights",
