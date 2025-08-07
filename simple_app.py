@@ -580,7 +580,7 @@ def create_contact_section():
                         html.I(className="fas fa-envelope me-2"),
                         "Request Access"
                     ],
-                        href="mailto:nrobinson@usc.edu.tt?subject=IR Systems Access Request",
+                        href="mailto:ir@usc.edu.tt?subject=IR Systems Access Request",
                         color="primary",
                         className="me-2 mb-2",
                         style={"borderRadius": "0"}),
@@ -631,7 +631,7 @@ def create_footer():
                         "St. Joseph, Trinidad and Tobago"
                     ], className="text-white-50"),
                     html.P([
-                        "Phone: (868) 645-3265",
+                        "1 (868) 662-2241",
                         html.Br(),
                         "Email: info@usc.edu.tt"
                     ], className="text-white-50")
