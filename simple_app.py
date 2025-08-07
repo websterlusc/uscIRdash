@@ -544,8 +544,8 @@ def create_contact_section():
                                 html.P([
                                     html.I(className="fas fa-envelope me-2"),
                                     html.Strong("Email: "),
-                                    html.A("nrobinson@usc.edu.tt",
-                                           href="mailto:robinsonn@usc.edu.tt",
+                                    html.A("ir@usc.edu.tt",
+                                           href="mailto:ir@usc.edu.tt",
                                            style={"color": USC_COLORS["primary_green"]})
                                 ], className="mb-2"),
                                 html.P([
