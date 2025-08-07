@@ -279,11 +279,6 @@ def create_hero_section():
                             style={"fontSize": "1.1rem", "opacity": "0.95",
                                    "textShadow": "1px 1px 2px rgba(0,0,0,0.3)"}),
                         html.Div([
-                            dbc.Alert([
-                                html.I(className="fas fa-info-circle me-2"),
-                                html.Strong("Note: "),
-                                "Interactive Factbook and Alumni Portal are available when running locally with the full system."
-                            ], color="warning", className="mb-4"),
                             dbc.Button([
                                 html.I(className="fas fa-envelope me-2"),
                                 "Contact for Access"
@@ -468,7 +463,7 @@ def create_mission_section():
                     dbc.CardHeader([
                         html.H5([
                             html.I(className="fas fa-bullseye me-2"),
-                            "Strategic Priorities (SP100)"
+                            "Strategic Priorities"
                         ], className="text-white mb-0")
                     ]),
                     dbc.CardBody([
@@ -544,22 +539,22 @@ def create_contact_section():
                                         style={"color": USC_COLORS["primary_green"]}),
                                 html.P([
                                     html.I(className="fas fa-phone me-2"),
-                                    html.Strong("Phone: "), "(868) 645-3265 Ext. 2245"
+                                    html.Strong("Phone: "), " 1 (868) 662-2241 Ext. 1004"
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-envelope me-2"),
                                     html.Strong("Email: "),
                                     html.A("nrobinson@usc.edu.tt",
-                                           href="mailto:nrobinson@usc.edu.tt",
+                                           href="mailto:robinsonn@usc.edu.tt",
                                            style={"color": USC_COLORS["primary_green"]})
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-map-marker-alt me-2"),
-                                    html.Strong("Office: "), "Administration Building, Room 201"
+                                    html.Strong("Office: "), "Administration Building"
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-clock me-2"),
-                                    html.Strong("Hours: "), "Monday - Friday, 8:00 AM - 4:30 PM"
+                                    html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:00 PM"
                                 ], className="mb-0")
                             ], md=8)
                         ])
@@ -614,8 +609,8 @@ def create_contact_section():
                 html.Div([
                     dbc.Alert([
                         html.I(className="fas fa-info-circle me-2"),
-                        html.Strong("Full System Demo: "),
-                        "Contact us to schedule a demonstration of our complete data analytics platform."
+                        html.Strong("Note: "),
+                        "Interactive Factbook and Alumni Portal are available when running locally with the full system."
                     ], color="info", className="mt-3")
                 ])
             ], md=6)
@@ -646,7 +641,7 @@ def create_footer():
                     html.Ul([
                         html.Li(html.A("USC Website", href="https://www.usc.edu.tt", className="text-white-50",
                                        target="_blank")),
-                        html.Li(html.A("Contact IR", href="mailto:nrobinson@usc.edu.tt", className="text-white-50")),
+                        html.Li(html.A("Contact IR", href="mailto:ir@usc.edu.tt", className="text-white-50")),
                         html.Li(html.A("Student Portal", href="#", className="text-white-50")),
                         html.Li(html.A("Faculty Resources", href="#", className="text-white-50")),
                     ], className="list-unstyled")
@@ -656,9 +651,9 @@ def create_footer():
                     html.P("Nordian C. Swaby Robinson", className="text-white-50 mb-1"),
                     html.P("Director, Institutional Research", className="text-white-50 mb-3"),
                     html.P([
-                        "Phone: (868) 645-3265 Ext. 2245",
+                        "Phone: 1 (868) 662-2241 Ext. 1004",
                         html.Br(),
-                        "Email: nrobinson@usc.edu.tt"
+                        "Email: ir@usc.edu.tt"
                     ], className="text-white-50")
                 ], md=4)
             ]),
