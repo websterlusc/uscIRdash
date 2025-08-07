@@ -518,96 +518,77 @@ def create_contact_section():
         html.H2("Department Leadership & Contact",
                 className="text-center mb-5",
                 style={"color": USC_COLORS["primary_green"], "fontWeight": "700"}),
+
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        dbc.Row([
-                            dbc.Col([
-                                html.Div([
-                                    html.I(className="fas fa-user fa-5x mb-3",
-                                           style={"color": USC_COLORS["primary_green"]}),
-                                    html.H5("Nordian C. Swaby Robinson",
-                                            style={"fontWeight": "600", "color": USC_COLORS["primary_green"]}),
-                                    html.P("Director, Institutional Research",
-                                           className="text-muted mb-3",
-                                           style={"fontSize": "1.1rem"})
-                                ], className="text-center")
-                            ], md=4),
-                            dbc.Col([
-                                html.H6("Contact Information", className="mb-3",
-                                        style={"color": USC_COLORS["primary_green"]}),
-                                html.P([
-                                    html.I(className="fas fa-phone me-2"),
-                                    html.Strong("Phone: "), " 1 (868) 662-2241 Ext. 1004"
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-envelope me-2"),
-                                    html.Strong("Email: "),
-                                    html.A("ir@usc.edu.tt",
-                                           href="mailto:ir@usc.edu.tt",
-                                           style={"color": USC_COLORS["primary_green"]})
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-map-marker-alt me-2"),
-                                    html.Strong("Office: "), "Administration Building"
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-clock me-2"),
-                                    html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:00 PM"
-                                ], className="mb-0")
-                            ], md=8)
-                        ])
+                        html.H5("Nordian C. Swaby Robinson",
+                                style={"fontWeight": "600", "color": USC_COLORS["primary_green"]}),
+                        html.P("Director, Institutional Research",
+                               className="text-muted mb-3",
+                               style={"fontSize": "1.1rem"}),
+                        html.H6("Contact Information", className="mb-3",
+                                style={"color": USC_COLORS["primary_green"]}),
+                        html.P([
+                            html.I(className="fas fa-phone me-2"),
+                            html.Strong("Phone: "), " 1 (868) 662-2241 Ext. 1004"
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-envelope me-2"),
+                            html.Strong("Email: "),
+                            html.A("ir@usc.edu.tt",
+                                   href="mailto:ir@usc.edu.tt",
+                                   style={"color": USC_COLORS["primary_green"]})
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-map-marker-alt me-2"),
+                            html.Strong("Office: "), "Administration Building"
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-clock me-2"),
+                            html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:00 PM"
+                        ], className="mb-0")
                     ])
                 ])
-            ])
-        ]),
-        html.Hr(className="my-5"),
-        dbc.Row([
+            ], md=6),
+
             dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        dbc.Row([
-                            dbc.Col([
-                                html.Div([
-                                    html.I(className="fas fa-user-tie fa-5x mb-3",
-                                           style={"color": USC_COLORS["primary_green"]}),
-                                    html.H5("Liam Webster",
-                                            style={"fontWeight": "600", "color": USC_COLORS["primary_green"]}),
-                                    html.P("Web Developer, Institutional Research",
-                                           className="text-muted mb-3",
-                                           style={"fontSize": "1.1rem"})
-                                ], className="text-center")
-                            ], md=4),
-                            dbc.Col([
-                                html.H6("Contact Information", className="mb-3",
-                                        style={"color": USC_COLORS["primary_green"]}),
-                                html.P([
-                                    html.I(className="fas fa-phone me-2"),
-                                    html.Strong("Phone: "), " 1 (868) 662-2241 Ext. 1003"
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-envelope me-2"),
-                                    html.Strong("Email: "),
-                                    html.A("websterl@usc.edu.tt",
-                                           href="mailto:websterl@usc.edu.tt",
-                                           style={"color": USC_COLORS["primary_green"]})
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-map-marker-alt me-2"),
-                                    html.Strong("Office: "), "Administration Building"
-                                ], className="mb-2"),
-                                html.P([
-                                    html.I(className="fas fa-clock me-2"),
-                                    html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:00 PM"
-                                ], className="mb-0")
-                            ], md=8)
-                        ])
+                        html.H5("Liam Webster",
+                                style={"fontWeight": "600", "color": USC_COLORS["primary_green"]}),
+                        html.P("Web Developer, Institutional Research",
+                               className="text-muted mb-3",
+                               style={"fontSize": "1.1rem"}),
+                        html.H6("Contact Information", className="mb-3",
+                                style={"color": USC_COLORS["primary_green"]}),
+                        html.P([
+                            html.I(className="fas fa-phone me-2"),
+                            html.Strong("Phone: "), " 1 (868) 662-2241 Ext. 1003"
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-envelope me-2"),
+                            html.Strong("Email: "),
+                            html.A("websterl@usc.edu.tt",
+                                   href="mailto:websterl@usc.edu.tt",
+                                   style={"color": USC_COLORS["primary_green"]})
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-map-marker-alt me-2"),
+                            html.Strong("Office: "), "Administration Building"
+                        ], className="mb-2"),
+                        html.P([
+                            html.I(className="fas fa-clock me-2"),
+                            html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:00 PM"
+                        ], className="mb-0")
                     ])
                 ])
-            ])
+            ], md=6)
         ]),
+
         html.Hr(className="my-5"),
+
         dbc.Row([
             dbc.Col([
                 html.H5("Access Our Systems", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
@@ -640,6 +621,7 @@ def create_contact_section():
                         style={"borderRadius": "0"})
                 ])
             ], md=6),
+
             dbc.Col([
                 html.H5("Data Services Available", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
                 html.P("Our department provides comprehensive data services:", className="mb-2"),
@@ -651,16 +633,15 @@ def create_contact_section():
                     html.Li("Survey design and analysis"),
                     html.Li("Strategic planning support")
                 ], style={"fontSize": "0.95rem"}),
-                html.Div([
-                    dbc.Alert([
-                        html.I(className="fas fa-info-circle me-2"),
-                        html.Strong("Note: "),
-                        "Interactive Factbook and Alumni Portal are available when running locally with the full system."
-                    ], color="info", className="mt-3")
-                ])
+                dbc.Alert([
+                    html.I(className="fas fa-info-circle me-2"),
+                    html.Strong("Note: "),
+                    "Interactive Factbook and Alumni Portal are available when running locally with the full system."
+                ], color="info", className="mt-3")
             ], md=6)
         ])
     ], className="py-5")
+
 
 
 def create_footer():
