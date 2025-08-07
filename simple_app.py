@@ -2,6 +2,7 @@ import dash
 from dash import dcc, html, Input, Output, callback
 import dash_bootstrap_components as dbc
 from datetime import datetime
+import os
 
 # Initialize the Dash app with Bootstrap theme
 app = dash.Dash(__name__,
@@ -9,6 +10,9 @@ app = dash.Dash(__name__,
                 meta_tags=[
                     {"name": "viewport", "content": "width=device-width, initial-scale=1"}
                 ])
+
+# Expose server for deployment
+server = app.server
 
 # USC Brand Colors (from brand guidelines)
 USC_COLORS = {
@@ -21,13 +25,27 @@ USC_COLORS = {
     'text_gray': '#666666'
 }
 
+
+# Get base URL for deployment
+def get_base_url():
+    """Get the base URL for links (local vs deployed)"""
+    if os.environ.get('RENDER'):
+        # On Render, use the service URL
+        return "https://uscirdash.onrender.com/"  # Replace with your actual Render URL
+    else:
+        # Local development
+        return "http://127.0.0.1"
+
+
+BASE_URL = get_base_url()
+
 # Inject custom CSS styles
 app.index_string = '''
 <!DOCTYPE html>
 <html>
     <head>
         {%metas%}
-        <title>{%title%}</title>
+        <title>USC Institutional Research</title>
         {%favicon%}
         {%css%}
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -183,10 +201,10 @@ def create_navbar():
             dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
             dbc.DropdownMenu(
                 children=[
-                    dbc.DropdownMenuItem("About USC", href="/about"),
-                    dbc.DropdownMenuItem("Vision & Mission", href="/vision-mission"),
-                    dbc.DropdownMenuItem("Governance", href="/governance"),
-                    dbc.DropdownMenuItem("Leadership", href="/leadership"),
+                    dbc.DropdownMenuItem("About USC", href="#about"),
+                    dbc.DropdownMenuItem("Vision & Mission", href="#vision-mission"),
+                    dbc.DropdownMenuItem("Governance", href="#governance"),
+                    dbc.DropdownMenuItem("Leadership", href="#leadership"),
                 ],
                 nav=True,
                 in_navbar=True,
@@ -194,10 +212,10 @@ def create_navbar():
             ),
             dbc.DropdownMenu(
                 children=[
-                    dbc.DropdownMenuItem("Student Enrollment", href="/enrollment"),
-                    dbc.DropdownMenuItem("Graduation Data", href="/graduation"),
-                    dbc.DropdownMenuItem("Academic Programs", href="/programs"),
-                    dbc.DropdownMenuItem("Faculty Statistics", href="/faculty"),
+                    dbc.DropdownMenuItem("Student Enrollment", href="#enrollment"),
+                    dbc.DropdownMenuItem("Graduation Data", href="#graduation"),
+                    dbc.DropdownMenuItem("Academic Programs", href="#programs"),
+                    dbc.DropdownMenuItem("Faculty Statistics", href="#faculty"),
                 ],
                 nav=True,
                 in_navbar=True,
@@ -205,10 +223,10 @@ def create_navbar():
             ),
             dbc.DropdownMenu(
                 children=[
-                    dbc.DropdownMenuItem("Financial Overview", href="/financial"),
-                    dbc.DropdownMenuItem("Subsidies & Funding", href="/funding"),
-                    dbc.DropdownMenuItem("Income Sources", href="/income"),
-                    dbc.DropdownMenuItem("Scholarships", href="/scholarships"),
+                    dbc.DropdownMenuItem("Financial Overview", href="#financial"),
+                    dbc.DropdownMenuItem("Subsidies & Funding", href="#funding"),
+                    dbc.DropdownMenuItem("Income Sources", href="#income"),
+                    dbc.DropdownMenuItem("Scholarships", href="#scholarships"),
                 ],
                 nav=True,
                 in_navbar=True,
@@ -216,19 +234,18 @@ def create_navbar():
             ),
             dbc.DropdownMenu(
                 children=[
-                    dbc.DropdownMenuItem("Student Services", href="/student-services"),
-                    dbc.DropdownMenuItem("Counselling", href="/counselling"),
-                    dbc.DropdownMenuItem("Spiritual Development", href="/spiritual"),
-                    dbc.DropdownMenuItem("Campus Life", href="/campus-life"),
+                    dbc.DropdownMenuItem("Student Services", href="#student-services"),
+                    dbc.DropdownMenuItem("Counselling", href="#counselling"),
+                    dbc.DropdownMenuItem("Spiritual Development", href="#spiritual"),
+                    dbc.DropdownMenuItem("Campus Life", href="#campus-life"),
                 ],
                 nav=True,
                 in_navbar=True,
                 label="Student Life",
             ),
-            dbc.NavItem(dbc.NavLink("Factbook", href="http://127.0.0.1:8501", target="_blank")),
-            dbc.NavItem(dbc.NavLink("Alumni Portal", href="http://127.0.0.1:8502", target="_blank")),
-            dbc.NavItem(dbc.NavLink("Reports", href="/reports")),
-            dbc.NavItem(dbc.NavLink("Contact", href="/contact")),
+            dbc.NavItem(dbc.NavLink("Factbook", href="#factbook")),
+            dbc.NavItem(dbc.NavLink("Alumni Portal", href="#alumni")),
+            dbc.NavItem(dbc.NavLink("Contact", href="#contact")),
         ],
         brand=html.Div([
             html.Img(src="/assets/usc-logo.png", height="40", className="me-2"),
@@ -254,7 +271,7 @@ def create_hero_section():
                                 style={"fontWeight": "700", "textShadow": "2px 2px 4px rgba(0,0,0,0.3)"}),
                         html.P(
                             "Empowering data-driven decision making through comprehensive analysis and transparent reporting",
-                            className="text-white mb-4",
+                            className="lead text-white mb-4",
                             style={"fontSize": "1.3rem", "textShadow": "1px 1px 2px rgba(0,0,0,0.3)"}),
                         html.P(
                             "Supporting USC's mission of transforming ordinary people into extraordinary servants of God through evidence-based insights",
@@ -262,22 +279,25 @@ def create_hero_section():
                             style={"fontSize": "1.1rem", "opacity": "0.95",
                                    "textShadow": "1px 1px 2px rgba(0,0,0,0.3)"}),
                         html.Div([
+                            dbc.Alert([
+                                html.I(className="fas fa-info-circle me-2"),
+                                html.Strong("Note: "),
+                                "Interactive Factbook and Alumni Portal are available when running locally with the full system."
+                            ], color="warning", className="mb-4"),
                             dbc.Button([
-                                html.I(className="fas fa-chart-bar me-2"),
-                                "Explore Factbook"
+                                html.I(className="fas fa-envelope me-2"),
+                                "Contact for Access"
                             ],
-                                href="http://127.0.0.1:8501",
-                                target="_blank",
+                                href="#contact",
                                 color="warning",
                                 size="lg",
                                 className="me-3 mb-3",
                                 style={"borderRadius": "0", "fontWeight": "600", "padding": "12px 30px"}),
                             dbc.Button([
-                                html.I(className="fas fa-users me-2"),
-                                "Alumni Portal"
+                                html.I(className="fas fa-info-circle me-2"),
+                                "Learn More"
                             ],
-                                href="http://127.0.0.1:8502",
-                                target="_blank",
+                                href="#about",
                                 color="outline-light",
                                 size="lg",
                                 className="mb-3",
@@ -340,30 +360,25 @@ def create_feature_cards():
             "title": "Academic Excellence",
             "description": "Comprehensive data on enrollment trends, graduation rates, and academic program performance across all schools and departments.",
             "icon": "fas fa-graduation-cap",
-            "link": "http://127.0.0.1:8501",
-            "color": USC_COLORS["primary_green"]
+            "info": "Available in full interactive dashboard"
         },
         {
             "title": "Financial Transparency",
             "description": "Detailed financial reports, funding sources, scholarships, and budget analysis to ensure responsible stewardship.",
             "icon": "fas fa-chart-line",
-            "link": "http://127.0.0.1:8501",
-            "color": USC_COLORS["secondary_green"]
+            "info": "Contact IR for detailed financial reports"
         },
         {
             "title": "Alumni Network",
             "description": "Connect with USC graduates worldwide, explore career opportunities, and access alumni services through our comprehensive portal.",
             "icon": "fas fa-users-cog",
-            "link": "http://127.0.0.1:8502",
-            "color": USC_COLORS["accent_yellow"]
+            "info": "Alumni portal available for registered users"
         },
         {
             "title": "Interactive Factbook",
-            "description": "Dynamic visualizations and comprehensive reports providing three-year trends across all university metrics."
-                           " -",
+            "description": "Dynamic visualizations and comprehensive reports providing three-year trends across all university metrics.",
             "icon": "fas fa-book-open",
-            "link": "http://127.0.0.1:8501",
-            "color": USC_COLORS["primary_green"]
+            "info": "Full factbook system with live data"
         }
     ]
 
@@ -380,15 +395,17 @@ def create_feature_cards():
                                 className="card-title text-center mb-3",
                                 style={"fontWeight": "600", "color": USC_COLORS["primary_green"]}),
                         html.P(feature["description"],
-                               className="card-text text-center mb-4",
+                               className="card-text text-center mb-3",
                                style={"color": USC_COLORS["text_gray"], "fontSize": "0.95rem"}),
+                        html.P(feature["info"],
+                               className="text-center text-muted mb-4",
+                               style={"fontSize": "0.85rem", "fontStyle": "italic"}),
                         html.Div([
                             dbc.Button([
-                                "Explore ",
-                                html.I(className="fas fa-arrow-right ms-1")
+                                "Contact IR ",
+                                html.I(className="fas fa-envelope ms-1")
                             ],
-                                href=feature["link"],
-                                target="_blank",
+                                href="#contact",
                                 color="primary",
                                 className="w-100",
                                 style={"borderRadius": "0", "fontWeight": "500"})
@@ -451,7 +468,7 @@ def create_mission_section():
                     dbc.CardHeader([
                         html.H5([
                             html.I(className="fas fa-bullseye me-2"),
-                            "Strategic Priorities"
+                            "Strategic Priorities (SP100)"
                         ], className="text-white mb-0")
                     ]),
                     dbc.CardBody([
@@ -495,14 +512,15 @@ def create_mission_section():
                     ])
                 ])
             ], md=6)
-        ], className="align-items-center")
+        ], className="align-items-center"),
+        html.Div(id="contact")  # Anchor for contact section
     ], className="py-5", style={"backgroundColor": USC_COLORS["light_gray"]})
 
 
 def create_contact_section():
     """Create contact and leadership section"""
     return dbc.Container([
-        html.H2("Department Leadership",
+        html.H2("Department Leadership & Contact",
                 className="text-center mb-5",
                 style={"color": USC_COLORS["primary_green"], "fontWeight": "700"}),
         dbc.Row([
@@ -526,7 +544,7 @@ def create_contact_section():
                                         style={"color": USC_COLORS["primary_green"]}),
                                 html.P([
                                     html.I(className="fas fa-phone me-2"),
-                                    html.Strong("Phone: "), "(868) 662-2241 Ext. 1004"
+                                    html.Strong("Phone: "), "(868) 645-3265 Ext. 2245"
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-envelope me-2"),
@@ -537,11 +555,11 @@ def create_contact_section():
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-map-marker-alt me-2"),
-                                    html.Strong("Office: "), "Administration Building"
+                                    html.Strong("Office: "), "Administration Building, Room 201"
                                 ], className="mb-2"),
                                 html.P([
                                     html.I(className="fas fa-clock me-2"),
-                                    html.Strong("Hours: "), "Monday - Thursday, 8:00 AM - 4:30 PM"
+                                    html.Strong("Hours: "), "Monday - Friday, 8:00 AM - 4:30 PM"
                                 ], className="mb-0")
                             ], md=8)
                         ])
@@ -552,24 +570,23 @@ def create_contact_section():
         html.Hr(className="my-5"),
         dbc.Row([
             dbc.Col([
-                html.H5("Quick Access", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
+                html.H5("Access Our Systems", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
+                html.P(
+                    "For access to our comprehensive data systems, please contact the Institutional Research department:",
+                    className="mb-3"),
+                html.Ul([
+                    html.Li("Interactive Factbook with live data visualizations"),
+                    html.Li("Alumni Portal and networking database"),
+                    html.Li("Financial reporting and analytics"),
+                    html.Li("Custom reports and analysis")
+                ], className="mb-4"),
                 html.Div([
                     dbc.Button([
-                        html.I(className="fas fa-chart-bar me-2"),
-                        "View Factbook"
+                        html.I(className="fas fa-envelope me-2"),
+                        "Request Access"
                     ],
-                        href="http://127.0.0.1:8501",
-                        target="_blank",
+                        href="mailto:nrobinson@usc.edu.tt?subject=IR Systems Access Request",
                         color="primary",
-                        className="me-2 mb-2",
-                        style={"borderRadius": "0"}),
-                    dbc.Button([
-                        html.I(className="fas fa-users me-2"),
-                        "Alumni Portal"
-                    ],
-                        href="http://127.0.0.1:8502",
-                        target="_blank",
-                        color="outline-primary",
                         className="me-2 mb-2",
                         style={"borderRadius": "0"}),
                     dbc.Button([
@@ -584,8 +601,8 @@ def create_contact_section():
                 ])
             ], md=6),
             dbc.Col([
-                html.H5("Data Requests & Services", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
-                html.P("Need specific data or custom reports? Our department provides:", className="mb-2"),
+                html.H5("Data Services Available", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
+                html.P("Our department provides comprehensive data services:", className="mb-2"),
                 html.Ul([
                     html.Li("Custom data analysis and reporting"),
                     html.Li("Alumni tracking and engagement metrics"),
@@ -594,14 +611,13 @@ def create_contact_section():
                     html.Li("Survey design and analysis"),
                     html.Li("Strategic planning support")
                 ], style={"fontSize": "0.95rem"}),
-                html.P([
-                    html.Strong("Alumni Data: "),
-                    "Access comprehensive alumni information through our ",
-                    html.A("Alumni Portal",
-                           href="http://127.0.0.1:8502",
-                           target="_blank",
-                           style={"color": USC_COLORS["primary_green"]})
-                ], className="mt-3", style={"fontSize": "0.9rem", "fontStyle": "italic"})
+                html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        html.Strong("Full System Demo: "),
+                        "Contact us to schedule a demonstration of our complete data analytics platform."
+                    ], color="info", className="mt-3")
+                ])
             ], md=6)
         ])
     ], className="py-5")
@@ -630,8 +646,7 @@ def create_footer():
                     html.Ul([
                         html.Li(html.A("USC Website", href="https://www.usc.edu.tt", className="text-white-50",
                                        target="_blank")),
-                        html.Li(html.A("Alumni Portal", href="http://127.0.0.1:8502", className="text-white-50",
-                                       target="_blank")),
+                        html.Li(html.A("Contact IR", href="mailto:nrobinson@usc.edu.tt", className="text-white-50")),
                         html.Li(html.A("Student Portal", href="#", className="text-white-50")),
                         html.Li(html.A("Faculty Resources", href="#", className="text-white-50")),
                     ], className="list-unstyled")
@@ -677,4 +692,8 @@ app.layout = html.Div([
 ])
 
 if __name__ == "__main__":
-    app.run(debug=True, host='127.0.0.1', port=8050)
+    # Use different settings for local vs production
+    port = int(os.environ.get('PORT', 8050))
+    debug = not os.environ.get('RENDER')
+
+    app.run(debug=debug, host='0.0.0.0', port=port)
