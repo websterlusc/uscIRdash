@@ -1,22 +1,22 @@
-# Core Dash Framework
+# Core Dash dependencies
 dash==2.17.1
 dash-bootstrap-components==1.5.0
+dash-table==5.0.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.24.3
+openpyxl==3.1.2
+
+# Plotting and visualization
 plotly==5.17.0
 
-# Data Processing
-pandas==2.1.4
+# Development tools
+python-dotenv==1.0.0
 
-# Web Server (for deployment)
+# Deployment
 gunicorn==21.2.0
 
-# Optional: Enhanced components
-dash-daq==0.5.0
-
-# Note: The following are built into Python and don't need installation:
-# - sqlite3 (database)
-# - secrets (token generation) 
-# - hashlib (password hashing)
-# - smtplib & email (email sending)
-# - datetime (date/time handling)
-# - re (regular expressions)
-# - os (system utilities)
+# Additional utilities
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.23.0
