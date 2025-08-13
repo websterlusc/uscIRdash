@@ -117,7 +117,7 @@ def create_vision_mission_motto_layout():
                                     style={"color": USC_COLORS["gold"], "fontWeight": "bold",
                                            "textShadow": f"2px 2px 4px {USC_COLORS['primary_green']}"})
                             ], className="p-4")
-                        ], style={"backgroundColor": USC_COLORS["primary_green"], "borderRadius": "15px"})
+                        ], style={ "borderRadius": "15px"})
                     ], className="shadow-lg mb-5")
                 ], width=12)
             ]),

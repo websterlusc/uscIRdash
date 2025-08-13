@@ -454,17 +454,14 @@ def create_navbar(user=None):
     """Create the main navigation bar with original styling"""
     nav_items = [
         dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
-        dbc.DropdownMenu(
-            children=[
-                dbc.DropdownMenuItem("About USC", href="#about"),
-                dbc.DropdownMenuItem("Vision & Mission", href="#vision-mission"),
-                dbc.DropdownMenuItem("Governance", href="#governance"),
-                dbc.DropdownMenuItem("Leadership", href="#leadership"),
-            ],
-            nav=True,
-            in_navbar=True,
-            label="About Us",
-        ),
+        dbc.DropdownMenu([
+            dbc.DropdownMenuItem(
+                dcc.Link("About USC", href="/about-usc", style={"textDecoration": "none", "color": "inherit"})),
+            dbc.DropdownMenuItem(dcc.Link("Vision, Mission & Motto", href="/vision-mission-motto",
+                                          style={"textDecoration": "none", "color": "inherit"})),
+            dbc.DropdownMenuItem(
+                dcc.Link("Governance", href="/governance", style={"textDecoration": "none", "color": "inherit"})),
+        ], nav=True, in_navbar=True, label="About USC", id="about-dropdown"),
     ]
 
     if user:
