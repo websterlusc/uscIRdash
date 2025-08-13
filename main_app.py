@@ -1270,10 +1270,12 @@ def create_admin_dashboard(user):
 
 
 # 4. REPLACE your existing create_login_page function with this enhanced version:
+# REPLACE your create_login_page function with this properly formatted version:
+
 def create_login_page():
-    """Enhanced login page with real Google OAuth"""
+    """Create login page with proper formatting and Google OAuth"""
     return html.Div([
-        # Google Sign-In JavaScript
+        # Google Sign-In JavaScript library
         html.Script(src="https://accounts.google.com/gsi/client", **{"async": True, "defer": True}),
 
         dbc.Container([
@@ -1286,28 +1288,32 @@ def create_login_page():
                         dbc.CardBody([
                             # Google OAuth Section for USC Employees
                             html.Div([
-                                html.H5("USC Employees - Google Sign-In", className="text-center mb-3",
+                                html.H5("USC Employees - Google Sign-In",
+                                        className="text-center mb-3",
                                         style={"color": USC_COLORS["primary_green"]}),
                                 html.P("Sign in with your USC Google account for instant access",
                                        className="text-center text-muted mb-4"),
 
                                 # Google Sign-In Button Container
-                                html.Div(id="google-signin-div", className="text-center mb-3"),
+                                html.Div(id="google-signin-div",
+                                         className="d-flex justify-content-center mb-3",
+                                         style={"minHeight": "50px"}),
 
                                 # Hidden input to capture Google credential
-                                dcc.Input(id="google-credential", type="hidden"),
+                                dcc.Input(id="google-credential", type="hidden", value=""),
 
                                 dbc.Alert([
                                     html.I(className="fas fa-info-circle me-2"),
                                     "USC employees (@usc.edu.tt) get automatic access to all data except financial reports."
                                 ], color="info", className="mb-4")
-                            ]),
+                            ], className="mb-4"),
 
                             html.Hr(className="my-4"),
 
-                            # Traditional Login Section (keep existing)
+                            # Traditional Login Section
                             html.Div([
-                                html.H5("Traditional Login", className="text-center mb-3",
+                                html.H5("Traditional Login",
+                                        className="text-center mb-3",
                                         style={"color": USC_COLORS["secondary_green"]}),
 
                                 dbc.Form([
@@ -1345,7 +1351,7 @@ def create_login_page():
                                         ], width=12)
                                     ])
                                 ])
-                            ]),
+                            ], className="mb-4"),
 
                             html.Hr(className="my-4"),
 
@@ -1374,57 +1380,81 @@ def create_login_page():
                         ])
                     ], className="shadow")
                 ], md=8, lg=6, className="mx-auto")
-            ], className="justify-content-center min-vh-100 align-items-center")
+            ], className="justify-content-center align-items-center",
+                style={"minHeight": "100vh"})
         ], fluid=True, className="py-5", style={"backgroundColor": "#f8f9fa"}),
 
-        # Google OAuth JavaScript
-        html.Script(children=f"""
-        function initializeGoogleSignIn() {{
-            if (typeof google !== 'undefined' && google.accounts) {{
-                google.accounts.id.initialize({{
-                    client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
-                    callback: handleCredentialResponse,
-                    auto_select: false,
-                    cancel_on_tap_outside: false
-                }});
+        # Google OAuth JavaScript - Properly formatted
+        html.Script("""
+            let googleInitialized = false;
 
-                google.accounts.id.renderButton(
-                    document.getElementById("google-signin-div"),
-                    {{
-                        theme: "filled_blue",
-                        size: "large", 
-                        width: "100%",
-                        text: "signin_with",
-                        logo_alignment: "left"
-                    }}
-                );
+            function initializeGoogleSignIn() {
+                if (typeof google !== 'undefined' && google.accounts && !googleInitialized) {
+                    console.log('🔍 Initializing Google Sign-In...');
 
-                // Enable one-tap for USC domain
-                google.accounts.id.prompt((notification) => {{
-                    console.log('One-tap notification:', notification);
-                }});
-            }} else {{
+                    try {
+                        google.accounts.id.initialize({
+                            client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
+                            callback: handleCredentialResponse,
+                            auto_select: false,
+                            cancel_on_tap_outside: false
+                        });
+
+                        const signInDiv = document.getElementById("google-signin-div");
+                        if (signInDiv) {
+                            google.accounts.id.renderButton(signInDiv, {
+                                theme: "filled_blue",
+                                size: "large",
+                                width: "300",
+                                text: "signin_with",
+                                logo_alignment: "left"
+                            });
+                            console.log('✅ Google Sign-In button rendered');
+                            googleInitialized = true;
+                        } else {
+                            console.log('❌ Could not find google-signin-div element');
+                        }
+                    } catch (error) {
+                        console.error('❌ Error initializing Google Sign-In:', error);
+                    }
+                } else if (!googleInitialized) {
+                    console.log('⏳ Google library not ready, retrying in 500ms...');
+                    setTimeout(initializeGoogleSignIn, 500);
+                }
+            }
+
+            function handleCredentialResponse(response) {
+                console.log('🔍 Google credential received');
+                try {
+                    const credentialInput = document.getElementById("google-credential");
+                    if (credentialInput) {
+                        credentialInput.value = response.credential;
+                        credentialInput.dispatchEvent(new Event('change', { bubbles: true }));
+                        console.log('✅ Credential stored and event dispatched');
+                    } else {
+                        console.error('❌ Could not find credential input element');
+                    }
+                } catch (error) {
+                    console.error('❌ Error handling credential response:', error);
+                }
+            }
+
+            // Initialize when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(initializeGoogleSignIn, 100);
+                });
+            } else {
                 setTimeout(initializeGoogleSignIn, 100);
-            }}
-        }}
+            }
 
-        function handleCredentialResponse(response) {{
-            // Store the credential in the hidden input
-            const credentialInput = document.getElementById("google-credential");
-            if (credentialInput) {{
-                credentialInput.value = response.credential;
-                credentialInput.dispatchEvent(new Event('change'));
-            }}
-        }}
-
-        // Initialize when DOM is ready
-        if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', initializeGoogleSignIn);
-        }} else {{
-            initializeGoogleSignIn();
-        }}
+            // Backup initialization after 2 seconds
+            setTimeout(initializeGoogleSignIn, 2000);
         """)
     ])
+
+
+# ALSO ADD this verify_google_token function if you haven't already:
 
 # 5. ADD this new callback for USC employee login:
 
@@ -2726,17 +2756,21 @@ def test_jwt():
         return False
 
 
+
 def verify_google_token(credential):
     """Verify Google ID token and extract user info"""
     try:
         from google.auth.transport import requests
         from google.oauth2 import id_token
 
+        # Use your actual client ID
+        client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+
         # Verify the token
         idinfo = id_token.verify_oauth2_token(
             credential,
             requests.Request(),
-            "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+            client_id
         )
 
         # Verify the issuer
@@ -2758,7 +2792,19 @@ def verify_google_token(credential):
     except Exception as e:
         print(f"❌ Google OAuth verification failed: {e}")
         return {'success': False, 'error': str(e)}
+
 # 6. ADD error handling for missing Google library:
+def check_google_auth_dependencies():
+    """Check if Google auth dependencies are installed"""
+    try:
+        from google.auth.transport import requests
+        from google.oauth2 import id_token
+        print("✅ Google OAuth libraries are installed")
+        return True
+    except ImportError as e:
+        print(f"❌ Missing Google OAuth libraries: {e}")
+        print("Install with: pip install google-auth google-auth-oauthlib google-auth-httplib2")
+        return False
 def check_google_auth_setup():
     """Check if Google OAuth is properly set up"""
     try:
@@ -2772,6 +2818,13 @@ def check_google_auth_setup():
         return False
 # Initialize database on startup
 if __name__ == '__main__':
+    print(f"🔍 DEBUG: SECRET_KEY length: {len(SECRET_KEY)}")
+    print(f"🔍 DEBUG: DATABASE path: {DATABASE}")
+    print(f"🔍 DEBUG: TOKEN_EXPIRY_HOURS: {TOKEN_EXPIRY_HOURS}")
+
+    # Check Google auth setup
+    check_google_auth_dependencies()
+
     print("=" * 60)
     print("USC INSTITUTIONAL RESEARCH PORTAL")
     print("=" * 60)

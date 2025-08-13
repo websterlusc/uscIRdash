@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a56f6a57-312c-431a-939b-8b07114b54b5" name="Changes" comment="atempting to add login">
-      <change beforePath="$PROJECT_DIR$/usc_ir_new.db" beforeDir="false" afterPath="$PROJECT_DIR$/usc_ir_new.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main_app.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -367,7 +367,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755105660824</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="atempting to add login">
+      <option name="closed" value="true" />
+      <created>1755106016633</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1755106016633</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
