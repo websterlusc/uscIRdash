@@ -10,10 +10,10 @@ import os
 import re
 import jwt
 import json
-from datetime import datetime, timedelta
-import sqlite3
-from oauthlib.common import generate_token
 
+from oauthlib.common import generate_token
+import sqlite3
+from datetime import datetime, timedelta
 # Add these imports at the top with your other imports
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
@@ -21,7 +21,15 @@ from pages.public.governance import create_governance_layout
 
 # Add to your imports
 from google_auth import init_google_auth_tables, verify_google_token, create_or_update_google_user, has_financial_access
+def adapt_datetime(dt):
+    return dt.isoformat()
 
+def convert_datetime(val):
+    return datetime.fromisoformat(val.decode())
+
+# Register adapters to fix deprecation warnings
+sqlite3.register_adapter(datetime, adapt_datetime)
+sqlite3.register_converter("TIMESTAMP", convert_datetime)
 # Add to your database initialization
 def init_database():
     """Initialize database with proper datetime handling"""
@@ -494,7 +502,9 @@ def decode_token(token):
 
 
 def authenticate_user(email_or_username, password):
-    """Authenticate user with email or username"""
+    """Authenticate user with email or username - WITH DEBUG"""
+    print(f"🔍 AUTHENTICATE: Trying to login: {email_or_username}")
+
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
@@ -505,8 +515,11 @@ def authenticate_user(email_or_username, password):
     ''', (email_or_username, email_or_username))
 
     user = cursor.fetchone()
+    print(f"🔍 AUTHENTICATE: User found: {user is not None}")
 
     if user and verify_password(password, user[3]):
+        print(f"🔍 AUTHENTICATE: Password verified for user ID: {user[0]}")
+
         if not user[9]:  # Check if approved
             conn.close()
             return {'success': False, 'message': 'Your account is pending approval. Please wait for admin approval.'}
@@ -518,6 +531,7 @@ def authenticate_user(email_or_username, password):
 
         # Create session token
         token = generate_token(user[0])
+        print(f"🔍 AUTHENTICATE: Generated token: {token[:50]}...")  # Show first 50 chars
 
         # Store session
         expires_at = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
@@ -527,22 +541,27 @@ def authenticate_user(email_or_username, password):
         ''', (user[0], token, expires_at))
         conn.commit()
 
-        conn.close()
-
-        return {
-            'success': True,
-            'token': token,
-            'user': {
-                'id': user[0],
-                'email': user[1],
-                'username': user[2],
-                'full_name': user[4],
-                'department': user[5],
-                'position': user[6],
-                'role': user[7]
-            }
+        user_data = {
+            'id': user[0],
+            'email': user[1],
+            'username': user[2],
+            'full_name': user[4],
+            'department': user[5],
+            'position': user[6],
+            'role': user[7]
         }
 
+        result = {
+            'success': True,
+            'token': token,
+            'user': user_data
+        }
+
+        print(f"🔍 AUTHENTICATE: Success! Token length: {len(token)}")
+        conn.close()
+        return result
+
+    print("❌ AUTHENTICATE: Authentication failed")
     conn.close()
     return {'success': False, 'message': 'Invalid credentials'}
 
@@ -2064,11 +2083,38 @@ def display_page(pathname, session_data):
             return navbar, create_change_password_page(user)
         else:
             return navbar, dbc.Alert("Please login to change password.", color="warning")
+    elif pathname == '/test-session':
+        # Test simple session storage
+        test_data = {'test': 'working', 'timestamp': str(datetime.now())}
+        return navbar, dbc.Container([
+            html.H3("Session Storage Test"),
+            html.P(f"Current session data: {session_data}"),
+            html.P("This tests if session storage is working at all."),
+            dbc.Button("Store Test Data", id="store-test-btn"),
+            html.Div(id="test-result")
+        ])
 
     # Default to home
     return navbar, create_home_page(user)
 
-
+@app.callback(
+    [Output('session-store', 'data', allow_duplicate=True),
+     Output('test-result', 'children')],
+    [Input('store-test-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def test_session_storage(n_clicks):
+    if n_clicks:
+        test_data = {
+            'test': 'session_working',
+            'timestamp': str(datetime.now()),
+            'token': 'test_token_12345'
+        }
+        return test_data, dbc.Alert(f"Stored: {test_data}", color="success")
+    return dash.no_update, ""
+print(f"🔍 DEBUG: SECRET_KEY length: {len(SECRET_KEY)}")
+print(f"🔍 DEBUG: DATABASE path: {DATABASE}")
+print(f"🔍 DEBUG: TOKEN_EXPIRY_HOURS: {TOKEN_EXPIRY_HOURS}")
 @app.callback(
     Output('admin-content', 'children'),
     [Input('admin-tabs', 'active_tab')],
@@ -2327,6 +2373,7 @@ def handle_password_reset(n_clicks, user_id, new_password, session_data):
 
 import traceback
 
+
 @app.callback(
     [Output('session-store', 'data'),
      Output('login-alert', 'children'),
@@ -2338,6 +2385,8 @@ import traceback
 )
 def handle_login(n_clicks, email_or_username, password):
     try:
+        print(f"🔍 LOGIN CALLBACK: n_clicks={n_clicks}, email={email_or_username}")
+
         if not n_clicks:
             return dash.no_update, "", dash.no_update
 
@@ -2345,16 +2394,19 @@ def handle_login(n_clicks, email_or_username, password):
             return dash.no_update, dbc.Alert("Please enter credentials", color="warning"), dash.no_update
 
         result = authenticate_user(email_or_username, password)
+        print(f"🔍 LOGIN CALLBACK: Auth result: {result.get('success')}")
 
         if result['success']:
             session_data = {'token': result['token'], 'user': result['user']}
-            # CHANGED: Redirect to dashboard instead of home page
+            print(f"🔍 LOGIN CALLBACK: Creating session with token: {result['token'][:20]}...")
+            print(f"🔍 LOGIN CALLBACK: Session data keys: {list(session_data.keys())}")
+
             return session_data, dbc.Alert("Login successful!", color="success"), "/dashboard"
         else:
             return dash.no_update, dbc.Alert(result['message'], color="danger"), dash.no_update
 
     except Exception as e:
-        print("Error in handle_login callback:")
+        print("❌ LOGIN CALLBACK ERROR:")
         traceback.print_exc()
         return dash.no_update, dbc.Alert(f"Unexpected error: {str(e)}", color="danger"), dash.no_update
 
@@ -2545,10 +2597,17 @@ def init_access_requests_table():
     conn.close()
 
 
-def generate_session_token(user):
-    """Generate session token - alias for existing generate_token function"""
-    return generate_token(user['id'])
 
+def generate_token(user_id):
+    """Generate JWT token for user - WITH DEBUG"""
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(hours=TOKEN_EXPIRY_HOURS),
+        'iat': datetime.utcnow()
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    print(f"🔍 GENERATE_TOKEN: Created token for user {user_id}, length: {len(token)}")
+    return token
 def get_access_requests_content():
     """Get access requests management content (admin only)"""
     return html.Div([
@@ -2562,6 +2621,18 @@ def has_financial_access(user):
 def is_usc_employee(email):
     """Check if email belongs to USC domain"""
     return email.endswith('@usc.edu.tt')
+def test_jwt():
+    """Test JWT token generation"""
+    try:
+        test_payload = {'user_id': 1, 'test': True}
+        test_token = jwt.encode(test_payload, SECRET_KEY, algorithm='HS256')
+        decoded = jwt.decode(test_token, SECRET_KEY, algorithms=['HS256'])
+        print(f"✅ JWT TEST: Token created and decoded successfully")
+        print(f"✅ JWT TEST: Token length: {len(test_token)}")
+        return True
+    except Exception as e:
+        print(f"❌ JWT TEST FAILED: {e}")
+        return False
 
 # Initialize database on startup
 if __name__ == '__main__':
