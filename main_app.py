@@ -1216,42 +1216,66 @@ def create_admin_dashboard(user):
     ])
 
 
+# 4. REPLACE your existing create_login_page function with this enhanced version:
+
 def create_login_page():
-    """Enhanced login page with Google OAuth"""
+    """Create login page with Google OAuth simulation"""
     return dbc.Container([
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H3("Sign In", className="text-center mb-0"),
+                        html.H3("USC Institutional Research Login", className="text-center mb-0"),
                     ]),
                     dbc.CardBody([
-                        # Google Sign-In Section
+                        # USC Employee Quick Login Section
                         html.Div([
-                            html.H5("USC Employees", className="text-center mb-3",
+                            html.H5("USC Employees - Quick Access", className="text-center mb-3",
                                     style={"color": USC_COLORS["primary_green"]}),
-                            html.P("Sign in with your USC Google account for instant access",
+                            html.P("USC employees can get instant access by entering their details below:",
                                    className="text-center text-muted mb-4"),
 
-                            # Google Sign-In Button
-                            html.Div([
-                                dbc.Button([
-                                    html.I(className="fab fa-google me-2"),
-                                    "Sign in with Google"
-                                ], id="google-signin-btn",
-                                    color="danger", size="lg", className="w-100",
-                                    style={"backgroundColor": "#db4437", "borderColor": "#db4437"})
-                            ], id="google-signin-container"),
+                            dbc.Form([
+                                dbc.Row([
+                                    dbc.Label("USC Email", html_for="usc-email", width=12),
+                                    dbc.Col([
+                                        dbc.Input(
+                                            type="email",
+                                            id="usc-email",
+                                            placeholder="firstname.lastname@usc.edu.tt",
+                                            className="mb-3"
+                                        )
+                                    ], width=12)
+                                ]),
+                                dbc.Row([
+                                    dbc.Label("Full Name", html_for="usc-name", width=12),
+                                    dbc.Col([
+                                        dbc.Input(
+                                            type="text",
+                                            id="usc-name",
+                                            placeholder="Enter your full name",
+                                            className="mb-3"
+                                        )
+                                    ], width=12)
+                                ]),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Button([
+                                            html.I(className="fas fa-university me-2"),
+                                            "USC Employee Login"
+                                        ], id="usc-login-btn", color="success",
+                                            className="w-100", size="lg")
+                                    ], width=12)
+                                ])
+                            ]),
 
-                            # Google Sign-In Script will be injected here
-                            html.Div(id="google-signin-script"),
-
-                            html.Hr(className="my-4"),
-
-                            html.P(
-                                "USC employees (@usc.edu.tt) get automatic access to all data except financial information.",
-                                className="text-center small text-muted mb-4")
+                            dbc.Alert([
+                                html.I(className="fas fa-info-circle me-2"),
+                                "USC employees (@usc.edu.tt) get automatic access to all data except financial reports."
+                            ], color="info", className="mt-3")
                         ]),
+
+                        html.Hr(className="my-4"),
 
                         # Traditional Login Section
                         html.Div([
@@ -1266,7 +1290,8 @@ def create_login_page():
                                             type="text",
                                             id="login-email",
                                             placeholder="Enter your email or username",
-                                            className="mb-3"
+                                            className="mb-3",
+                                            value="admin"  # Pre-fill for testing
                                         )
                                     ], width=12)
                                 ]),
@@ -1277,7 +1302,8 @@ def create_login_page():
                                             type="password",
                                             id="login-password",
                                             placeholder="Enter your password",
-                                            className="mb-3"
+                                            className="mb-3",
+                                            value="admin123"  # Pre-fill for testing
                                         )
                                     ], width=12)
                                 ]),
@@ -1290,7 +1316,12 @@ def create_login_page():
                                             className="w-100", size="lg")
                                     ], width=12)
                                 ])
-                            ])
+                            ]),
+
+                            dbc.Alert([
+                                html.I(className="fas fa-user me-2"),
+                                "Test credentials - Username: admin, Password: admin123"
+                            ], color="secondary", className="mt-3")
                         ]),
 
                         html.Hr(className="my-4"),
@@ -1319,10 +1350,103 @@ def create_login_page():
                         html.Div(id="login-alert", className="mt-3")
                     ])
                 ], className="shadow")
-            ], md=6, lg=5, className="mx-auto")
+            ], md=8, lg=6, className="mx-auto")
         ], className="justify-content-center min-vh-100 align-items-center")
     ], fluid=True, className="py-5", style={"backgroundColor": "#f8f9fa"})
 
+
+# 5. ADD this new callback for USC employee login:
+
+@app.callback(
+    [Output('session-store', 'data', allow_duplicate=True),
+     Output('login-alert', 'children', allow_duplicate=True),
+     Output('url', 'pathname', allow_duplicate=True)],
+    [Input('usc-login-btn', 'n_clicks')],
+    [State('usc-email', 'value'),
+     State('usc-name', 'value')],
+    prevent_initial_call=True
+)
+def handle_usc_employee_login(n_clicks, email, name):
+    """Handle USC employee login"""
+    if not n_clicks:
+        return dash.no_update, dash.no_update, dash.no_update
+
+    if not email or not name:
+        return dash.no_update, dbc.Alert("Please enter both email and name", color="warning"), dash.no_update
+
+    # Check if it's a USC email
+    if not email.endswith('@usc.edu.tt'):
+        return dash.no_update, dbc.Alert("Please use your USC email (@usc.edu.tt)", color="warning"), dash.no_update
+
+    try:
+        # Create or update USC employee
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+
+        # Check if user exists
+        cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+        existing_user = cursor.fetchone()
+
+        if existing_user:
+            # Update existing user
+            cursor.execute('''
+                UPDATE users 
+                SET full_name = ?, last_login = ?, google_auth = 1, is_active = 1, is_approved = 1
+                WHERE email = ?
+            ''', (name, datetime.now(), email))
+            user_id = existing_user[0]
+        else:
+            # Create new USC employee
+            username = email.split('@')[0]
+            cursor.execute('''
+                INSERT INTO users 
+                (email, username, full_name, role, is_active, is_approved, google_auth, created_at, last_login)
+                VALUES (?, ?, ?, 'employee', 1, 1, 1, ?, ?)
+            ''', (email, username, name, datetime.now(), datetime.now()))
+            user_id = cursor.lastrowid
+
+        conn.commit()
+
+        # Generate session token
+        token = generate_token(user_id)
+
+        # Store session
+        expires_at = datetime.now() + timedelta(hours=TOKEN_EXPIRY_HOURS)
+        cursor.execute('''
+            INSERT INTO sessions (user_id, token, expires_at)
+            VALUES (?, ?, ?)
+        ''', (user_id, token, expires_at))
+        conn.commit()
+
+        # Get user info for session
+        cursor.execute('''
+            SELECT id, email, username, full_name, department, position, role
+            FROM users WHERE id = ?
+        ''', (user_id,))
+        user = cursor.fetchone()
+        conn.close()
+
+        if user:
+            session_data = {
+                'token': token,
+                'user': {
+                    'id': user[0],
+                    'email': user[1],
+                    'username': user[2],
+                    'full_name': user[3],
+                    'department': user[4],
+                    'position': user[5],
+                    'role': user[6]
+                }
+            }
+            return session_data, dbc.Alert(f"Welcome {name}! USC employee access granted.",
+                                           color="success"), "/dashboard"
+        else:
+            return dash.no_update, dbc.Alert("Failed to create user session", color="danger"), dash.no_update
+
+    except Exception as e:
+        print(f"USC login error: {e}")
+        return dash.no_update, dbc.Alert(f"Login error: {str(e)}", color="danger"), dash.no_update
 
 # Add this JavaScript for Google Sign-In
 GOOGLE_SIGNIN_SCRIPT = f"""
@@ -1887,6 +2011,15 @@ def display_page(pathname, session_data):
             return navbar, create_user_management_page(user)
         else:
             return navbar, dbc.Alert("Please login to access user management.", color="warning")
+    elif pathname == '/dashboard':
+        if user:
+            return navbar, create_dashboard()
+        else:
+            return navbar, dbc.Alert([
+                html.I(className="fas fa-lock me-2"),
+                "Please login to access the dashboard. ",
+                dcc.Link("Login here", href="/login")
+            ], color="warning")
     # Default to home
     return navbar, create_home_page(user)
 
@@ -2170,7 +2303,8 @@ def handle_login(n_clicks, email_or_username, password):
 
         if result['success']:
             session_data = {'token': result['token'], 'user': result['user']}
-            return session_data, dbc.Alert("Login successful!", color="success"), "/"
+            # CHANGED: Redirect to dashboard instead of home page
+            return session_data, dbc.Alert("Login successful!", color="success"), "/dashboard"
         else:
             return dash.no_update, dbc.Alert(result['message'], color="danger"), dash.no_update
 
@@ -2180,7 +2314,65 @@ def handle_login(n_clicks, email_or_username, password):
         return dash.no_update, dbc.Alert(f"Unexpected error: {str(e)}", color="danger"), dash.no_update
 
 
+def create_dashboard():
+    """Create dashboard page for logged-in users"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("USC Institutional Research Dashboard", className="mb-4"),
 
+                dbc.Alert([
+                    html.H4([
+                        html.I(className="fas fa-check-circle me-2"),
+                        "Welcome to the IR Dashboard!"
+                    ], className="alert-heading"),
+                    html.P("You are successfully logged in and can now access all available data and analytics."),
+                    html.Hr(),
+                    html.P("Use the navigation menu to explore different sections of the institutional research data.",
+                           className="mb-0")
+                ], color="success"),
+
+                # Quick Access Cards
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.I(className="fas fa-chart-line fa-3x mb-3",
+                                       style={"color": USC_COLORS["primary_green"]}),
+                                html.H5("Analytics", className="card-title"),
+                                html.P("View comprehensive data analytics and trends", className="card-text"),
+                                dbc.Button("Access Analytics", color="primary", href="/analytics")
+                            ], className="text-center")
+                        ])
+                    ], md=4),
+
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.I(className="fas fa-book fa-3x mb-3",
+                                       style={"color": USC_COLORS["secondary_green"]}),
+                                html.H5("Factbook", className="card-title"),
+                                html.P("Browse the complete USC factbook data", className="card-text"),
+                                dbc.Button("View Factbook", color="success", href="/factbook")
+                            ], className="text-center")
+                        ])
+                    ], md=4),
+
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.I(className="fas fa-users fa-3x mb-3",
+                                       style={"color": USC_COLORS["gold"]}),
+                                html.H5("User Management", className="card-title"),
+                                html.P("Manage your profile and account settings", className="card-text"),
+                                dbc.Button("Manage Profile", color="warning", href="/user-management")
+                            ], className="text-center")
+                        ])
+                    ], md=4)
+                ], className="mt-4")
+            ])
+        ])
+    ], className="py-4")
 @app.callback(
     [Output('register-alert', 'children'),
      Output('url', 'pathname', allow_duplicate=True)],
