@@ -14,6 +14,14 @@ import json
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
 from pages.public.governance import create_governance_layout
+
+# Add to your imports
+from google_auth import init_google_auth_tables, verify_google_token, create_or_update_google_user, has_financial_access
+
+# Add to your database initialization
+def init_database():
+    # Your existing init code...
+    init_google_auth_tables()  # Add this line
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'usc-ir-secret-key-2025-change-in-production')
 DATABASE = 'usc_ir_new.db'
@@ -545,7 +553,7 @@ def create_navbar(user=None):
 
 
 def create_hero_section():
-    """Create the hero section with USC branding"""
+    """Create enhanced hero section with USC ecosystem links"""
     return html.Div([
         dbc.Container([
             dbc.Row([
@@ -561,32 +569,98 @@ def create_hero_section():
                         html.P(
                             "Supporting USC's mission of transforming ordinary people into extraordinary servants of God through evidence-based insights",
                             className="text-white mb-5",
-                            style={"fontSize": "1.1rem", "opacity": "0.95"}),
+                            style={"fontSize": "1.1rem", "opacity": "0.95",
+                                   "textShadow": "1px 1px 2px rgba(0,0,0,0.3)"}),
+
+                        # Action buttons
                         html.Div([
+                            dbc.Button([
+                                html.I(className="fas fa-chart-line me-2"),
+                                "Explore Analytics"
+                            ], size="lg", color="warning", className="me-3 mb-3",
+                                href="/dashboard"),
+                            dbc.Button([
+                                html.I(className="fas fa-book me-2"),
+                                "View Factbook"
+                            ], size="lg", color="outline-light", className="me-3 mb-3",
+                                href="/factbook"),
                             dbc.Button([
                                 html.I(className="fas fa-key me-2"),
                                 "Request Access"
-                            ],
-                                href="/request",
-                                color="warning",
-                                size="lg",
-                                className="me-3 mb-3",
-                                style={"borderRadius": "0", "fontWeight": "600", "padding": "12px 30px"}),
-                            dbc.Button([
-                                html.I(className="fas fa-info-circle me-2"),
-                                "Learn More"
-                            ],
-                                href="#about",
-                                color="outline-light",
-                                size="lg",
-                                className="mb-3",
-                                style={"borderRadius": "0", "fontWeight": "600", "padding": "12px 30px"})
-                        ])
-                    ], className="text-center")
-                ], lg=10, className="mx-auto"),
+                            ], size="lg", color="outline-light", className="mb-3",
+                                href="/request")
+                        ], className="mb-5"),
+
+                        # USC Ecosystem Links
+                        html.Div([
+                            html.H4("USC Digital Ecosystem",
+                                    className="text-white mb-4",
+                                    style={"fontWeight": "600"}),
+
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Card([
+                                        dbc.CardBody([
+                                            html.I(className="fas fa-graduation-cap fa-2x mb-3",
+                                                   style={"color": USC_COLORS["primary_green"]}),
+                                            html.H6("USC Aeorion", className="card-title mb-2"),
+                                            html.P("Student Information System", className="card-text small mb-3"),
+                                            dbc.Button([
+                                                html.I(className="fas fa-external-link-alt me-2"),
+                                                "Access Aeorion"
+                                            ], size="sm", color="primary",
+                                                href="https://aeorion.usc.edu.tt",
+                                                target="_blank", className="w-100")
+                                        ], className="text-center")
+                                    ], className="h-100 shadow-sm")
+                                ], md=4, className="mb-3"),
+
+                                dbc.Col([
+                                    dbc.Card([
+                                        dbc.CardBody([
+                                            html.I(className="fas fa-address-book fa-2x mb-3",
+                                                   style={"color": USC_COLORS["secondary_green"]}),
+                                            html.H6("USC Directory", className="card-title mb-2"),
+                                            html.P("Staff & Faculty Directory", className="card-text small mb-3"),
+                                            dbc.Button([
+                                                html.I(className="fas fa-external-link-alt me-2"),
+                                                "View Directory"
+                                            ], size="sm", color="success",
+                                                href="https://directory.usc.edu.tt",
+                                                target="_blank", className="w-100")
+                                        ], className="text-center")
+                                    ], className="h-100 shadow-sm")
+                                ], md=4, className="mb-3"),
+
+                                dbc.Col([
+                                    dbc.Card([
+                                        dbc.CardBody([
+                                            html.I(className="fas fa-laptop fa-2x mb-3",
+                                                   style={"color": USC_COLORS["accent_yellow"]}),
+                                            html.H6("USC eLearn", className="card-title mb-2"),
+                                            html.P("Learning Management System", className="card-text small mb-3"),
+                                            dbc.Button([
+                                                html.I(className="fas fa-external-link-alt me-2"),
+                                                "Access eLearn"
+                                            ], size="sm", color="warning",
+                                                href="https://elearn.usc.edu.tt",
+                                                target="_blank", className="w-100")
+                                        ], className="text-center")
+                                    ], className="h-100 shadow-sm")
+                                ], md=4, className="mb-3")
+                            ])
+                        ], className="mt-5")
+
+                    ], className="text-center py-5")
+                ], width=12)
             ])
-        ], fluid=True)
-    ], className="hero-section")
+        ])
+    ], style={
+        "background": f"linear-gradient(135deg, {USC_COLORS['primary_green']} 0%, {USC_COLORS['secondary_green']} 100%)",
+        "minHeight": "80vh",
+        "display": "flex",
+        "alignItems": "center"
+    })
 
 
 def create_quick_stats():
@@ -976,56 +1050,163 @@ def create_admin_dashboard(user):
 
 
 def create_login_page():
-    """Create login page with original design"""
+    """Enhanced login page with Google OAuth"""
     return dbc.Container([
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H3([
-                            html.I(className="fas fa-sign-in-alt me-2"),
-                            "Login to IR Portal"
-                        ], className="text-white mb-0")
+                        html.H3("Sign In", className="text-center mb-0"),
                     ]),
                     dbc.CardBody([
-                        html.Div(id="login-alert", className="mb-3"),
-                        dbc.Form([
+                        # Google Sign-In Section
+                        html.Div([
+                            html.H5("USC Employees", className="text-center mb-3",
+                                    style={"color": USC_COLORS["primary_green"]}),
+                            html.P("Sign in with your USC Google account for instant access",
+                                   className="text-center text-muted mb-4"),
+
+                            # Google Sign-In Button
+                            html.Div([
+                                dbc.Button([
+                                    html.I(className="fab fa-google me-2"),
+                                    "Sign in with Google"
+                                ], id="google-signin-btn",
+                                    color="danger", size="lg", className="w-100",
+                                    style={"backgroundColor": "#db4437", "borderColor": "#db4437"})
+                            ], id="google-signin-container"),
+
+                            # Google Sign-In Script will be injected here
+                            html.Div(id="google-signin-script"),
+
+                            html.Hr(className="my-4"),
+
+                            html.P(
+                                "USC employees (@usc.edu.tt) get automatic access to all data except financial information.",
+                                className="text-center small text-muted mb-4")
+                        ]),
+
+                        # Traditional Login Section
+                        html.Div([
+                            html.H5("Traditional Login", className="text-center mb-3",
+                                    style={"color": USC_COLORS["secondary_green"]}),
+
+                            dbc.Form([
+                                dbc.Row([
+                                    dbc.Label("Email or Username", html_for="login-email", width=12),
+                                    dbc.Col([
+                                        dbc.Input(
+                                            type="text",
+                                            id="login-email",
+                                            placeholder="Enter your email or username",
+                                            className="mb-3"
+                                        )
+                                    ], width=12)
+                                ]),
+                                dbc.Row([
+                                    dbc.Label("Password", html_for="login-password", width=12),
+                                    dbc.Col([
+                                        dbc.Input(
+                                            type="password",
+                                            id="login-password",
+                                            placeholder="Enter your password",
+                                            className="mb-3"
+                                        )
+                                    ], width=12)
+                                ]),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Button([
+                                            html.I(className="fas fa-sign-in-alt me-2"),
+                                            "Sign In"
+                                        ], id="login-submit", color="primary",
+                                            className="w-100", size="lg")
+                                    ], width=12)
+                                ])
+                            ])
+                        ]),
+
+                        html.Hr(className="my-4"),
+
+                        # Links Section
+                        html.Div([
                             dbc.Row([
                                 dbc.Col([
-                                    dbc.Label([
-                                        html.I(className="fas fa-user me-2"),
-                                        "Email or Username"
-                                    ], className="fw-bold"),
-                                    dbc.Input(id="login-email", type="text",
-                                              placeholder="Enter email or username")
-                                ])
-                            ], className="mb-3"),
-                            dbc.Row([
+                                    html.P([
+                                        "Don't have an account? ",
+                                        dcc.Link("Register here", href="/register",
+                                                 style={"color": USC_COLORS["primary_green"]})
+                                    ], className="text-center mb-2")
+                                ], width=12),
                                 dbc.Col([
-                                    dbc.Label([
-                                        html.I(className="fas fa-lock me-2"),
-                                        "Password"
-                                    ], className="fw-bold"),
-                                    dbc.Input(id="login-password", type="password",
-                                              placeholder="Enter password")
-                                ])
-                            ], className="mb-4"),
-                            dbc.Button([
-                                html.I(className="fas fa-sign-in-alt me-2"),
-                                "Login"
-                            ], id="login-submit", color="primary", size="lg",
-                                className="w-100", n_clicks=0, style={"borderRadius": "0"}),
-                            html.Hr(),
-                            html.P([
-                                "Don't have an account? ",
-                                dcc.Link("Register here", href="/register")
-                            ], className="text-center")
-                        ])
+                                    html.P([
+                                        "Need access? ",
+                                        dcc.Link("Request access", href="/request",
+                                                 style={"color": USC_COLORS["secondary_green"]})
+                                    ], className="text-center mb-0")
+                                ], width=12)
+                            ])
+                        ]),
+
+                        # Alert for login messages
+                        html.Div(id="login-alert", className="mt-3")
                     ])
-                ])
+                ], className="shadow")
             ], md=6, lg=5, className="mx-auto")
-        ])
-    ], className="py-5")
+        ], className="justify-content-center min-vh-100 align-items-center")
+    ], fluid=True, className="py-5", style={"backgroundColor": "#f8f9fa"})
+
+
+# Add this JavaScript for Google Sign-In
+GOOGLE_SIGNIN_SCRIPT = f"""
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+function handleCredentialResponse(response) {{
+    // Send the credential to your backend
+    fetch('/auth/google', {{
+        method: 'POST',
+        headers: {{
+            'Content-Type': 'application/json',
+        }},
+        body: JSON.stringify({{
+            credential: response.credential
+        }})
+    }})
+    .then(response => response.json())
+    .then(data => {{
+        if (data.success) {{
+            window.location.href = '/dashboard';
+        }} else {{
+            alert('Authentication failed: ' + data.error);
+        }}
+    }})
+    .catch((error) => {{
+        console.error('Error:', error);
+        alert('Authentication error occurred');
+    }});
+}}
+
+window.onload = function() {{
+    google.accounts.id.initialize({{
+        client_id: "{890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com}",
+        callback: handleCredentialResponse
+    }});
+
+    google.accounts.id.renderButton(
+        document.getElementById("google-signin-btn"),
+        {{
+            theme: "filled_blue",
+            size: "large",
+            width: "100%",
+            text: "signin_with"
+        }}
+    );
+
+    // Enable one-tap sign-in for USC domain
+    google.accounts.id.prompt();
+}};
+</script>
+"""
 
 
 def create_register_page():
@@ -1158,6 +1339,293 @@ def create_home_page(user=None):
         ])
 
 
+def create_user_management_page(current_user):
+    """Create user management page accessible to logged-in users"""
+    is_admin = current_user['role'] == 'admin'
+
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H2("User Management", className="mb-4"),
+
+                # Tabs for different sections
+                dbc.Tabs([
+                    dbc.Tab(label="My Profile", tab_id="profile-tab"),
+                    dbc.Tab(label="All Users", tab_id="users-tab") if is_admin else None,
+                    dbc.Tab(label="Access Requests", tab_id="requests-tab") if is_admin else None,
+                ], id="user-mgmt-tabs", active_tab="profile-tab"),
+
+                html.Div(id="user-mgmt-content", className="mt-4")
+            ])
+        ])
+    ], className="py-4")
+
+
+def get_profile_content(user):
+    """Get profile management content"""
+    return html.Div([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H4("My Profile", className="mb-0")
+                    ]),
+                    dbc.CardBody([
+                        dbc.Row([
+                            dbc.Col([
+                                # Profile Picture
+                                html.Div([
+                                    html.Img(
+                                        src=user.get('profile_picture', '/assets/default-avatar.png'),
+                                        style={"width": "100px", "height": "100px", "borderRadius": "50%"}
+                                    ) if user.get('profile_picture') else html.Div([
+                                        html.I(className="fas fa-user fa-4x",
+                                               style={"color": USC_COLORS["primary_green"]})
+                                    ], className="text-center"),
+
+                                    html.H5(user['full_name'], className="mt-3 mb-1"),
+                                    html.P(user['email'], className="text-muted mb-2"),
+                                    dbc.Badge(user['role'].title(),
+                                              color="primary" if user['role'] == 'admin' else "secondary",
+                                              className="mb-3")
+                                ], className="text-center")
+                            ], md=4),
+
+                            dbc.Col([
+                                # Profile Form
+                                dbc.Form([
+                                    dbc.Row([
+                                        dbc.Label("Full Name", width=3),
+                                        dbc.Col([
+                                            dbc.Input(
+                                                id="profile-fullname",
+                                                value=user['full_name'],
+                                                type="text"
+                                            )
+                                        ], width=9)
+                                    ], className="mb-3"),
+
+                                    dbc.Row([
+                                        dbc.Label("Email", width=3),
+                                        dbc.Col([
+                                            dbc.Input(
+                                                id="profile-email",
+                                                value=user['email'],
+                                                type="email",
+                                                disabled=True  # Email shouldn't be editable
+                                            )
+                                        ], width=9)
+                                    ], className="mb-3"),
+
+                                    dbc.Row([
+                                        dbc.Label("Username", width=3),
+                                        dbc.Col([
+                                            dbc.Input(
+                                                id="profile-username",
+                                                value=user['username'],
+                                                type="text"
+                                            )
+                                        ], width=9)
+                                    ], className="mb-3"),
+
+                                    dbc.Row([
+                                        dbc.Label("Department", width=3),
+                                        dbc.Col([
+                                            dbc.Input(
+                                                id="profile-department",
+                                                value=user.get('department', ''),
+                                                type="text",
+                                                placeholder="Enter your department"
+                                            )
+                                        ], width=9)
+                                    ], className="mb-3"),
+
+                                    dbc.Row([
+                                        dbc.Label("Position", width=3),
+                                        dbc.Col([
+                                            dbc.Input(
+                                                id="profile-position",
+                                                value=user.get('position', ''),
+                                                type="text",
+                                                placeholder="Enter your position"
+                                            )
+                                        ], width=9)
+                                    ], className="mb-3"),
+
+                                    html.Hr(),
+
+                                    # Change Password Section (only for non-Google users)
+                                    html.Div([
+                                        html.H6("Change Password", className="mb-3"),
+                                        dbc.Row([
+                                            dbc.Label("Current Password", width=3),
+                                            dbc.Col([
+                                                dbc.Input(
+                                                    id="current-password",
+                                                    type="password",
+                                                    placeholder="Enter current password"
+                                                )
+                                            ], width=9)
+                                        ], className="mb-3"),
+
+                                        dbc.Row([
+                                            dbc.Label("New Password", width=3),
+                                            dbc.Col([
+                                                dbc.Input(
+                                                    id="new-password",
+                                                    type="password",
+                                                    placeholder="Enter new password"
+                                                )
+                                            ], width=9)
+                                        ], className="mb-3"),
+
+                                        dbc.Row([
+                                            dbc.Label("Confirm Password", width=3),
+                                            dbc.Col([
+                                                dbc.Input(
+                                                    id="confirm-password",
+                                                    type="password",
+                                                    placeholder="Confirm new password"
+                                                )
+                                            ], width=9)
+                                        ], className="mb-3"),
+                                    ], style={"display": "none" if user.get('google_auth') else "block"}),
+
+                                    # Action Buttons
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Button([
+                                                html.I(className="fas fa-save me-2"),
+                                                "Update Profile"
+                                            ], id="update-profile-btn", color="primary", className="me-2"),
+
+                                            dbc.Button([
+                                                html.I(className="fas fa-key me-2"),
+                                                "Change Password"
+                                            ], id="change-password-btn", color="secondary",
+                                                style={
+                                                    "display": "none" if user.get('google_auth') else "inline-block"})
+                                        ], width=12)
+                                    ])
+                                ])
+                            ], md=8)
+                        ])
+                    ])
+                ])
+            ], width=12)
+        ]),
+
+        # Access Permissions Card
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H5("Access Permissions", className="mb-0")
+                    ]),
+                    dbc.CardBody([
+                        dbc.Row([
+                            dbc.Col([
+                                html.H6("Data Access Level"),
+                                dbc.Badge("Financial Access" if has_financial_access(user) else "Standard Access",
+                                          color="success" if has_financial_access(user) else "info")
+                            ], md=6),
+                            dbc.Col([
+                                html.H6("Account Status"),
+                                dbc.Badge(user['status'].title(),
+                                          color="success" if user['status'] == 'active' else "warning")
+                            ], md=6)
+                        ])
+                    ])
+                ])
+            ], width=12)
+        ], className="mt-4"),
+
+        # Alert for profile updates
+        html.Div(id="profile-alert", className="mt-3")
+    ])
+
+
+def get_users_content():
+    """Get all users management content (admin only)"""
+    return html.Div([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H4("User Management", className="mb-0"),
+                        dbc.Button([
+                            html.I(className="fas fa-plus me-2"),
+                            "Add User"
+                        ], id="add-user-btn", color="primary", size="sm", className="float-end")
+                    ]),
+                    dbc.CardBody([
+                        # Search and Filter
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.Input(id="user-search", placeholder="Search users..."),
+                                    dbc.Button([
+                                        html.I(className="fas fa-search")
+                                    ], id="search-btn", color="outline-secondary")
+                                ])
+                            ], md=6),
+                            dbc.Col([
+                                dbc.Select(
+                                    id="role-filter",
+                                    options=[
+                                        {"label": "All Roles", "value": "all"},
+                                        {"label": "Admin", "value": "admin"},
+                                        {"label": "Employee", "value": "employee"},
+                                        {"label": "Guest", "value": "guest"}
+                                    ],
+                                    value="all"
+                                )
+                            ], md=3),
+                            dbc.Col([
+                                dbc.Select(
+                                    id="status-filter",
+                                    options=[
+                                        {"label": "All Status", "value": "all"},
+                                        {"label": "Active", "value": "active"},
+                                        {"label": "Pending", "value": "pending"},
+                                        {"label": "Suspended", "value": "suspended"}
+                                    ],
+                                    value="all"
+                                )
+                            ], md=3)
+                        ], className="mb-4"),
+
+                        # Users Table
+                        html.Div(id="users-table-container")
+                    ])
+                ])
+            ])
+        ])
+    ])
+
+
+# Add callbacks for user management
+@app.callback(
+    Output("user-mgmt-content", "children"),
+    [Input("user-mgmt-tabs", "active_tab")],
+    [State("session-store", "data")]
+)
+def update_user_mgmt_content(active_tab, session_data):
+    if not session_data or 'token' not in session_data:
+        return dbc.Alert("Please log in to access this page.", color="warning")
+
+    user = validate_session(session_data['token'])
+    if not user:
+        return dbc.Alert("Invalid session. Please log in again.", color="danger")
+
+    if active_tab == "profile-tab":
+        return get_profile_content(user)
+    elif active_tab == "users-tab" and user['role'] == 'admin':
+        return get_users_content()
+    elif active_tab == "requests-tab" and user['role'] == 'admin':
+        return get_access_requests_content()
+    else:
+        return dbc.Alert("Access denied.", color="danger")
 def create_request_form():
     """Create access request form"""
     return dbc.Container([
@@ -1247,7 +1715,12 @@ def display_page(pathname, session_data):
             return navbar, create_change_password_page(user)
         else:
             return navbar, dbc.Alert("Please login to change password.", color="warning")
-
+    # Add after your existing routes
+    elif pathname == '/user-management':
+        if user:
+            return navbar, create_user_management_page(user)
+        else:
+            return navbar, dbc.Alert("Please login to access user management.", color="warning")
     # Default to home
     return navbar, create_home_page(user)
 
@@ -1592,6 +2065,47 @@ def handle_logout(n_clicks, session_data):
     return dash.no_update, dash.no_update
 
 
+@app.callback(
+    Output('session-store', 'data', allow_duplicate=True),
+    Output('url', 'pathname', allow_duplicate=True),
+    [Input('url', 'search')],
+    prevent_initial_call=True
+)
+def handle_google_auth(search):
+    if search and 'credential=' in search:
+        # Extract credential from URL
+        import urllib.parse
+        params = urllib.parse.parse_qs(search[1:])  # Remove '?'
+        credential = params.get('credential', [None])[0]
+
+        if credential:
+            # Verify Google token
+            result = verify_google_token(credential)
+
+            if result['success']:
+                # Create or update user
+                user_result = create_or_update_google_user(result['user'])
+
+                if user_result['success']:
+                    # Generate session token
+                    token = generate_session_token(user_result['user'])
+                    session_data = {'token': token, 'user': user_result['user']}
+                    return session_data, '/dashboard'
+
+    return dash.no_update, dash.no_update
+
+
+def check_financial_access(user):
+    """Middleware to check financial data access"""
+    if not user:
+        return False
+
+    # USC employees get standard access, admins get financial access
+    if user['role'] == 'admin':
+        return True
+
+    # Check if USC employee has been granted financial access
+    return has_financial_access(user)
 # Initialize database on startup
 if __name__ == '__main__':
     print("=" * 60)
