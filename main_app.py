@@ -1188,7 +1188,7 @@ function handleCredentialResponse(response) {{
 
 window.onload = function() {{
     google.accounts.id.initialize({{
-        client_id: "{890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com}",
+        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
         callback: handleCredentialResponse
     }});
 
@@ -1207,7 +1207,6 @@ window.onload = function() {{
 }};
 </script>
 """
-
 
 def create_register_page():
     """Create registration page"""
