@@ -10,6 +10,9 @@ import os
 import re
 import jwt
 import json
+
+from oauthlib.common import generate_token
+
 # Add these imports at the top with your other imports
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
@@ -22,6 +25,35 @@ from google_auth import init_google_auth_tables, verify_google_token, create_or_
 def init_database():
     # Your existing init code...
     init_google_auth_tables()  # Add this line
+    init_access_requests_table()
+
+    # Also add missing columns to users table for Google auth
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    # Add Google auth columns if they don't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN google_auth INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN profile_picture TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN department TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN position TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    conn.commit()
+    conn.close()
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'usc-ir-secret-key-2025-change-in-production')
 DATABASE = 'usc_ir_new.db'
@@ -282,16 +314,151 @@ def verify_password(password, stored_hash):
         return False
 
 
-def generate_token(user_id):
-    """Generate JWT token for user"""
-    payload = {
-        'user_id': user_id,
-        'exp': datetime.utcnow() + timedelta(hours=TOKEN_EXPIRY_HOURS),
-        'iat': datetime.utcnow()
-    }
-    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+def load_access_requests(status_filter="all"):
+    """Load access requests from database"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+
+        if status_filter == "all":
+            cursor.execute('''
+                SELECT id, name, email, department, position, is_usc_employee, 
+                       access_type, justification, requested_duration, status, 
+                       DATE(timestamp) as request_date
+                FROM access_requests 
+                ORDER BY timestamp DESC
+            ''')
+        else:
+            cursor.execute('''
+                SELECT id, name, email, department, position, is_usc_employee, 
+                       access_type, justification, requested_duration, status, 
+                       DATE(timestamp) as request_date
+                FROM access_requests 
+                WHERE status = ?
+                ORDER BY timestamp DESC
+            ''', (status_filter,))
+
+        requests = cursor.fetchall()
+        conn.close()
+
+        # Convert to list of dictionaries
+        request_list = []
+        for req in requests:
+            request_list.append({
+                'id': req[0],
+                'name': req[1],
+                'email': req[2],
+                'department': req[3],
+                'position': req[4],
+                'is_usc_employee': 'Yes' if req[5] else 'No',
+                'access_type': req[6],
+                'justification': req[7],
+                'duration': req[8],
+                'status': req[9],
+                'request_date': req[10]
+            })
+
+        return request_list
+
+    except Exception as e:
+        print(f"Error loading access requests: {e}")
+        return []
 
 
+def create_requests_table(requests):
+    """Create table component for access requests"""
+    if not requests:
+        return dbc.Alert("No access requests found.", color="info")
+
+    # Create table rows
+    table_rows = []
+    for req in requests:
+        status_badge = dbc.Badge(
+            req['status'].title(),
+            color="warning" if req['status'] == 'pending'
+            else "success" if req['status'] == 'approved'
+            else "danger"
+        )
+
+        actions = html.Div([
+            dbc.Button("View", id=f"view-{req['id']}", size="sm",
+                       color="outline-primary", className="me-1"),
+            dbc.Button("Approve", id=f"approve-{req['id']}", size="sm",
+                       color="success", className="me-1") if req['status'] == 'pending' else None,
+            dbc.Button("Deny", id=f"deny-{req['id']}", size="sm",
+                       color="danger") if req['status'] == 'pending' else None
+        ])
+
+        table_rows.append(html.Tr([
+            html.Td(req['name']),
+            html.Td(req['email']),
+            html.Td(req['department']),
+            html.Td(req['is_usc_employee']),
+            html.Td(req['access_type']),
+            html.Td(status_badge),
+            html.Td(req['request_date']),
+            html.Td(actions)
+        ]))
+
+    return dbc.Table([
+        html.Thead([
+            html.Tr([
+                html.Th("Name"),
+                html.Th("Email"),
+                html.Th("Department"),
+                html.Th("USC Employee"),
+                html.Th("Access Type"),
+                html.Th("Status"),
+                html.Th("Date"),
+                html.Th("Actions")
+            ])
+        ]),
+        html.Tbody(table_rows)
+    ], striped=True, bordered=True, hover=True, responsive=True)
+def generate_session_token(user):
+    """Generate session token - alias for existing generate_token function"""
+    return generate_token(user['id'])
+
+
+def get_access_requests_content():
+    """Get access requests management content (admin only)"""
+    return html.Div([
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H4("Access Requests", className="mb-0")
+                    ]),
+                    dbc.CardBody([
+                        # Filter controls
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Select(
+                                    id="request-status-filter",
+                                    options=[
+                                        {"label": "All Requests", "value": "all"},
+                                        {"label": "Pending", "value": "pending"},
+                                        {"label": "Approved", "value": "approved"},
+                                        {"label": "Denied", "value": "denied"}
+                                    ],
+                                    value="pending"
+                                )
+                            ], md=4),
+                            dbc.Col([
+                                dbc.Button([
+                                    html.I(className="fas fa-sync me-2"),
+                                    "Refresh"
+                                ], id="refresh-requests-btn", color="outline-primary")
+                            ], md=4)
+                        ], className="mb-4"),
+
+                        # Requests table
+                        html.Div(id="access-requests-table")
+                    ])
+                ])
+            ])
+        ])
+    ])
 def decode_token(token):
     """Decode and validate JWT token"""
     try:
@@ -2065,33 +2232,86 @@ def handle_logout(n_clicks, session_data):
 
 
 @app.callback(
-    Output('session-store', 'data', allow_duplicate=True),
-    Output('url', 'pathname', allow_duplicate=True),
-    [Input('url', 'search')],
+    [Output('session-store', 'data', allow_duplicate=True),
+     Output('login-alert', 'children', allow_duplicate=True)],
+    [Input('google-signin-response', 'children')],
     prevent_initial_call=True
 )
-def handle_google_auth(search):
-    if search and 'credential=' in search:
-        # Extract credential from URL
-        import urllib.parse
-        params = urllib.parse.parse_qs(search[1:])  # Remove '?'
-        credential = params.get('credential', [None])[0]
+def handle_google_auth(google_response):
+    """Handle Google authentication response"""
+    if not google_response:
+        return dash.no_update, dash.no_update
 
-        if credential:
+    try:
+        # Parse the Google response (this would come from your frontend)
+        import json
+        response_data = json.loads(google_response) if isinstance(google_response, str) else google_response
+
+        if 'credential' in response_data:
             # Verify Google token
-            result = verify_google_token(credential)
+            from google_auth import verify_google_token, create_or_update_google_user
+
+            result = verify_google_token(response_data['credential'])
 
             if result['success']:
                 # Create or update user
                 user_result = create_or_update_google_user(result['user'])
 
                 if user_result['success']:
-                    # Generate session token
-                    token = generate_session_token(user_result['user'])
+                    # Generate session token using your existing function
+                    token = generate_token(user_result['user']['id'])  # Use existing function
                     session_data = {'token': token, 'user': user_result['user']}
-                    return session_data, '/dashboard'
+                    return session_data, dbc.Alert("Google sign-in successful!", color="success")
+                else:
+                    return dash.no_update, dbc.Alert(f"Account creation failed: {user_result['error']}", color="danger")
+            else:
+                return dash.no_update, dbc.Alert(f"Google authentication failed: {result['error']}", color="danger")
+
+    except Exception as e:
+        return dash.no_update, dbc.Alert(f"Authentication error: {str(e)}", color="danger")
 
     return dash.no_update, dash.no_update
+
+
+# Add callback for access requests table
+@app.callback(
+    Output("access-requests-table", "children"),
+    [Input("request-status-filter", "value"),
+     Input("refresh-requests-btn", "n_clicks")]
+)
+def update_requests_table(status_filter, refresh_clicks):
+    """Update the access requests table"""
+    requests = load_access_requests(status_filter)
+    return create_requests_table(requests)
+
+
+# Add missing database tables initialization
+def init_access_requests_table():
+    """Initialize access requests table if it doesn't exist"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS access_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            department TEXT,
+            position TEXT,
+            is_usc_employee INTEGER DEFAULT 0,
+            access_type TEXT,
+            justification TEXT,
+            requested_duration TEXT,
+            status TEXT DEFAULT 'pending',
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            approved_by INTEGER,
+            approved_at DATETIME,
+            FOREIGN KEY (approved_by) REFERENCES users (id)
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
 
 
 def check_financial_access(user):
