@@ -10,7 +10,8 @@ import os
 import re
 import jwt
 import json
-
+from datetime import datetime, timedelta
+import sqlite3
 from oauthlib.common import generate_token
 
 # Add these imports at the top with your other imports
@@ -23,34 +24,58 @@ from google_auth import init_google_auth_tables, verify_google_token, create_or_
 
 # Add to your database initialization
 def init_database():
-    # Your existing init code...
-    init_google_auth_tables()  # Add this line
-    init_access_requests_table()
-
-    # Also add missing columns to users table for Google auth
+    """Initialize database with proper datetime handling"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
-    # Add Google auth columns if they don't exist
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN google_auth INTEGER DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Set datetime adapter to avoid deprecation warning
+    sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
+    sqlite3.register_converter("TIMESTAMP", lambda val: datetime.fromisoformat(val.decode()))
 
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN profile_picture TEXT')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Your existing table creation code...
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT,
+            full_name TEXT NOT NULL,
+            department TEXT,
+            position TEXT,
+            role TEXT DEFAULT 'user',
+            is_active INTEGER DEFAULT 1,
+            is_approved INTEGER DEFAULT 0,
+            google_auth INTEGER DEFAULT 0,
+            profile_picture TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP,
+            approved_by INTEGER,
+            approved_at TIMESTAMP
+        )
+    ''')
 
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN department TEXT')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
 
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN position TEXT')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Check if default admin exists
+    cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
+    if not cursor.fetchone():
+        admin_password = hash_password('admin123')
+        cursor.execute('''
+            INSERT INTO users 
+            (email, username, password_hash, full_name, department, position, role, is_active, is_approved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', ('ir@usc.edu.tt', 'admin', admin_password, 'System Administrator',
+              'Institutional Research', 'Director', 'admin', 1, 1))
+        print("Default admin created - Username: admin, Password: admin123")
 
     conn.commit()
     conn.close()
@@ -523,13 +548,19 @@ def authenticate_user(email_or_username, password):
 
 
 def validate_session(token):
-    """Validate user session"""
+    """Validate user session with debug logging"""
+    print(f"🔍 DEBUG: Validating token: {token[:20] if token else 'None'}...")
+
     if not token:
+        print("❌ DEBUG: No token provided")
         return None
 
     payload = decode_token(token)
     if not payload:
+        print("❌ DEBUG: Failed to decode token")
         return None
+
+    print(f"✅ DEBUG: Token decoded successfully, user_id: {payload.get('user_id')}")
 
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -545,6 +576,7 @@ def validate_session(token):
     conn.close()
 
     if user:
+        print(f"✅ DEBUG: User found: {user[2]} ({user[1]})")
         return {
             'id': user[0],
             'email': user[1],
@@ -554,7 +586,9 @@ def validate_session(token):
             'position': user[5],
             'role': user[6]
         }
-    return None
+    else:
+        print("❌ DEBUG: No valid user session found")
+        return None
 
 
 def logout_user(token):
@@ -1967,14 +2001,20 @@ app.layout = html.Div([
     [State('session-store', 'data')]
 )
 def display_page(pathname, session_data):
-    """Main router callback"""
+    """Main router callback with debug logging"""
+    print(f"🔍 DEBUG: Accessing pathname: {pathname}")
+    print(f"🔍 DEBUG: Session data: {session_data}")
+
     user = None
     if session_data and 'token' in session_data:
+        print("🔍 DEBUG: Token found in session, validating...")
         user = validate_session(session_data['token'])
+        print(f"🔍 DEBUG: User validation result: {user}")
+    else:
+        print("❌ DEBUG: No token in session data")
 
     navbar = create_navbar(user)
 
-    # ===== ADD THESE NEW ROUTES =====
     # Public pages
     if pathname == '/about-usc':
         return navbar, create_about_usc_layout()
@@ -1989,18 +2029,25 @@ def display_page(pathname, session_data):
     elif pathname == '/request':
         return navbar, create_request_form()
 
-    # ===== ADD THIS DASHBOARD ROUTE =====
+    # DASHBOARD ROUTE WITH DEBUG
     elif pathname == '/dashboard':
+        print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
         if user:
+            print("✅ DEBUG: User authenticated, showing dashboard")
             return navbar, create_dashboard()
         else:
+            print("❌ DEBUG: User not authenticated, showing login prompt")
             return navbar, dbc.Alert([
                 html.I(className="fas fa-lock me-2"),
                 "Please login to access the dashboard. ",
                 dcc.Link("Login here", href="/login")
             ], color="warning")
-    # ===== END NEW ROUTES =====
-
+    elif pathname == '/test-dashboard':
+        # Test route that doesn't require authentication
+        return navbar, dbc.Container([
+            dbc.Alert("Test Dashboard - No Authentication Required", color="info"),
+            html.P("If you can see this, routing is working correctly.")
+        ])
     # Protected pages - require login
     elif pathname == '/admin':
         if user and user['role'] == 'admin':
@@ -2313,64 +2360,58 @@ def handle_login(n_clicks, email_or_username, password):
 
 
 def create_dashboard():
-    """Create dashboard page for logged-in users"""
+    """Create dashboard page for logged-in users with session debug info"""
     return dbc.Container([
         dbc.Row([
             dbc.Col([
-                html.H1("USC Institutional Research Dashboard", className="mb-4"),
-
+                html.H1("USC IR Dashboard", className="mb-4"),
                 dbc.Alert([
                     html.H4([
                         html.I(className="fas fa-check-circle me-2"),
-                        "Welcome to the IR Dashboard!"
+                        "Welcome to the Dashboard!"
                     ], className="alert-heading"),
-                    html.P("You are successfully logged in and can now access all available data and analytics."),
-                    html.Hr(),
-                    html.P("Use the navigation menu to explore different sections of the institutional research data.",
-                           className="mb-0")
+                    html.P("✅ You are successfully logged in and authenticated."),
+                    html.P(id="session-debug-info", className="small text-muted")
                 ], color="success"),
 
-                # Quick Access Cards
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardBody([
-                                html.I(className="fas fa-chart-line fa-3x mb-3",
-                                       style={"color": USC_COLORS["primary_green"]}),
-                                html.H5("Analytics", className="card-title"),
-                                html.P("View comprehensive data analytics and trends", className="card-text"),
-                                dbc.Button("Access Analytics", color="primary", href="/analytics")
-                            ], className="text-center")
-                        ])
-                    ], md=4),
-
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardBody([
-                                html.I(className="fas fa-book fa-3x mb-3",
-                                       style={"color": USC_COLORS["secondary_green"]}),
-                                html.H5("Factbook", className="card-title"),
-                                html.P("Browse the complete USC factbook data", className="card-text"),
-                                dbc.Button("View Factbook", color="success", href="/factbook")
-                            ], className="text-center")
-                        ])
-                    ], md=4),
-
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardBody([
-                                html.I(className="fas fa-users fa-3x mb-3",
-                                       style={"color": USC_COLORS["gold"]}),
-                                html.H5("User Management", className="card-title"),
-                                html.P("Manage your profile and account settings", className="card-text"),
-                                dbc.Button("Manage Profile", color="warning", href="/user-management")
-                            ], className="text-center")
-                        ])
-                    ], md=4)
+                # Session Debug Card
+                dbc.Card([
+                    dbc.CardHeader("Session Debug Info"),
+                    dbc.CardBody([
+                        html.Div(id="session-details")
+                    ])
                 ], className="mt-4")
             ])
         ])
     ], className="py-4")
+
+
+# 5. ADD callback to show session info on dashboard:
+
+@app.callback(
+    [Output('session-debug-info', 'children'),
+     Output('session-details', 'children')],
+    [Input('url', 'pathname')],
+    [State('session-store', 'data')]
+)
+def update_session_debug(pathname, session_data):
+    """Show session debug information"""
+    if pathname == '/dashboard':
+        if session_data:
+            user = validate_session(session_data.get('token')) if session_data.get('token') else None
+
+            debug_info = f"Session Token: {session_data.get('token', 'None')[:20]}..." if session_data.get(
+                'token') else "No token"
+
+            details = [
+                html.P(f"Token exists: {'✅' if session_data.get('token') else '❌'}"),
+                html.P(f"User validated: {'✅' if user else '❌'}"),
+                html.P(f"User info: {user}" if user else "No user data")
+            ]
+
+            return debug_info, details
+
+    return "", ""
 @app.callback(
     [Output('register-alert', 'children'),
      Output('url', 'pathname', allow_duplicate=True)],
