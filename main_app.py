@@ -1973,24 +1973,36 @@ def display_page(pathname, session_data):
         user = validate_session(session_data['token'])
 
     navbar = create_navbar(user)
-    # Add these routes right after line where you define navbar = create_navbar(user)
-    # Public pages - no authentication required
+
+    # ===== ADD THESE NEW ROUTES =====
+    # Public pages
     if pathname == '/about-usc':
         return navbar, create_about_usc_layout()
     elif pathname == '/vision-mission-motto':
         return navbar, create_vision_mission_motto_layout()
     elif pathname == '/governance':
         return navbar, create_governance_layout()
-    # Public pages
-    if pathname == '/login':
+    elif pathname == '/login':
         return navbar, create_login_page()
     elif pathname == '/register':
         return navbar, create_register_page()
     elif pathname == '/request':
         return navbar, create_request_form()
 
+    # ===== ADD THIS DASHBOARD ROUTE =====
+    elif pathname == '/dashboard':
+        if user:
+            return navbar, create_dashboard()
+        else:
+            return navbar, dbc.Alert([
+                html.I(className="fas fa-lock me-2"),
+                "Please login to access the dashboard. ",
+                dcc.Link("Login here", href="/login")
+            ], color="warning")
+    # ===== END NEW ROUTES =====
+
     # Protected pages - require login
-    if pathname == '/admin':
+    elif pathname == '/admin':
         if user and user['role'] == 'admin':
             return navbar, create_admin_dashboard(user)
         else:
@@ -2005,21 +2017,7 @@ def display_page(pathname, session_data):
             return navbar, create_change_password_page(user)
         else:
             return navbar, dbc.Alert("Please login to change password.", color="warning")
-    # Add after your existing routes
-    elif pathname == '/user-management':
-        if user:
-            return navbar, create_user_management_page(user)
-        else:
-            return navbar, dbc.Alert("Please login to access user management.", color="warning")
-    elif pathname == '/dashboard':
-        if user:
-            return navbar, create_dashboard()
-        else:
-            return navbar, dbc.Alert([
-                html.I(className="fas fa-lock me-2"),
-                "Please login to access the dashboard. ",
-                dcc.Link("Login here", href="/login")
-            ], color="warning")
+
     # Default to home
     return navbar, create_home_page(user)
 
@@ -2506,17 +2504,24 @@ def init_access_requests_table():
     conn.close()
 
 
-def check_financial_access(user):
-    """Middleware to check financial data access"""
-    if not user:
-        return False
+def generate_session_token(user):
+    """Generate session token - alias for existing generate_token function"""
+    return generate_token(user['id'])
 
-    # USC employees get standard access, admins get financial access
-    if user['role'] == 'admin':
-        return True
+def get_access_requests_content():
+    """Get access requests management content (admin only)"""
+    return html.Div([
+        dbc.Alert("Access requests management - coming soon!", color="info")
+    ])
 
-    # Check if USC employee has been granted financial access
-    return has_financial_access(user)
+def has_financial_access(user):
+    """Check if user has access to financial data"""
+    return user.get('role') == 'admin'
+
+def is_usc_employee(email):
+    """Check if email belongs to USC domain"""
+    return email.endswith('@usc.edu.tt')
+
 # Initialize database on startup
 if __name__ == '__main__':
     print("=" * 60)
