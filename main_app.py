@@ -10,7 +10,9 @@ import os
 import re
 import jwt
 import json
-
+from pages.public.about_usc import create_about_usc_layout
+from pages.public.vision_mission_motto import create_vision_mission_motto_layout
+from pages.public.governance import create_governance_layout
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'usc-ir-secret-key-2025-change-in-production')
 DATABASE = 'usc_ir_new.db'
@@ -1215,9 +1217,14 @@ def display_page(pathname, session_data):
         user = validate_session(session_data['token'])
 
     navbar = create_navbar(user)
-
+    if pathname == '/about-usc':
+        return navbar, create_about_usc_layout()
+    elif pathname == '/vision-mission-motto':
+        return navbar, create_vision_mission_motto_layout()
+    elif pathname == '/governance':
+        return navbar, create_governance_layout()
     # Public pages
-    if pathname == '/login':
+    elif pathname == '/login':
         return navbar, create_login_page()
     elif pathname == '/register':
         return navbar, create_register_page()
