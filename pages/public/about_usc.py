@@ -23,7 +23,7 @@ def create_about_usc_layout():
                 dbc.Col([
                     html.Div([
                         html.H1([
-                            "About the University of the Southern Caribbean",
+                            "Facts About the University of the Southern Caribbean",
                         ], className="display-4 text-center mb-4",
                             style={"color": USC_COLORS["primary_green"], "fontWeight": "bold"}),
 

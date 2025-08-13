@@ -456,7 +456,7 @@ def create_navbar(user=None):
         dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
         dbc.DropdownMenu([
             dbc.DropdownMenuItem(
-                dcc.Link("About USC", href="/about-usc", style={"textDecoration": "none", "color": "inherit"})),
+                dcc.Link("Facts About USC", href="/about-usc", style={"textDecoration": "none", "color": "inherit"})),
             dbc.DropdownMenuItem(dcc.Link("Vision, Mission & Motto", href="/vision-mission-motto",
                                           style={"textDecoration": "none", "color": "inherit"})),
             dbc.DropdownMenuItem(
