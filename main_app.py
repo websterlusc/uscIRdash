@@ -10,6 +10,7 @@ import os
 import re
 import jwt
 import json
+# Add these imports at the top with your other imports
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
 from pages.public.governance import create_governance_layout
@@ -1217,6 +1218,8 @@ def display_page(pathname, session_data):
         user = validate_session(session_data['token'])
 
     navbar = create_navbar(user)
+    # Add these routes right after line where you define navbar = create_navbar(user)
+    # Public pages - no authentication required
     if pathname == '/about-usc':
         return navbar, create_about_usc_layout()
     elif pathname == '/vision-mission-motto':
@@ -1224,7 +1227,7 @@ def display_page(pathname, session_data):
     elif pathname == '/governance':
         return navbar, create_governance_layout()
     # Public pages
-    elif pathname == '/login':
+    if pathname == '/login':
         return navbar, create_login_page()
     elif pathname == '/register':
         return navbar, create_register_page()
