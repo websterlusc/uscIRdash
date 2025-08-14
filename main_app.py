@@ -570,7 +570,7 @@ def authenticate_user(email_or_username, password):
 def verify_google_token(credential):
     """Verify Google ID token and extract user info"""
     try:
-        client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+        client_id = "638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com"
 
         idinfo = id_token.verify_oauth2_token(
             credential,
@@ -1804,7 +1804,7 @@ function handleCredentialResponse(response) {{
 
 window.onload = function() {{
     google.accounts.id.initialize({{
-        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
+        client_id: "638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com",
         callback: handleCredentialResponse
     }});
 
