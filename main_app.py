@@ -19,15 +19,7 @@ from datetime import datetime, timedelta
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
 from pages.public.governance import create_governance_layout
-import dash
-from dash import dcc, html, Input, Output, State, callback_context
-import dash_bootstrap_components as dbc
-import sqlite3
-import pandas as pd
-import hashlib
-import secrets
-import jwt
-from datetime import datetime, timedelta
+
 # Add to your imports
 from google_auth import init_google_auth_tables, verify_google_token, create_or_update_google_user, has_financial_access
 def adapt_datetime(dt):
@@ -41,215 +33,61 @@ sqlite3.register_adapter(datetime, adapt_datetime)
 sqlite3.register_converter("TIMESTAMP", convert_datetime)
 # Add to your database initialization
 def init_database():
-    """Initialize database with enhanced user schema"""
+    """Initialize database with proper datetime handling"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
-    # Enhanced users table with phone number and employee status
+    # Set datetime adapter to avoid deprecation warning
+    sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
+    sqlite3.register_converter("TIMESTAMP", lambda val: datetime.fromisoformat(val.decode()))
+
+    # Your existing table creation code...
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            password_hash TEXT,
             full_name TEXT NOT NULL,
-            phone_number TEXT,
             department TEXT,
             position TEXT,
-            is_usc_employee INTEGER DEFAULT 0,
             role TEXT DEFAULT 'user',
             is_active INTEGER DEFAULT 1,
             is_approved INTEGER DEFAULT 0,
+            google_auth INTEGER DEFAULT 0,
+            profile_picture TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP,
             approved_by INTEGER,
-            approved_at DATETIME,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_login DATETIME,
-            password_reset_token TEXT,
-            password_reset_expires DATETIME,
-            FOREIGN KEY (approved_by) REFERENCES users (id)
+            approved_at TIMESTAMP
         )
     ''')
 
-    # Sessions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             token TEXT UNIQUE NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires_at DATETIME NOT NULL,
-            ip_address TEXT,
-            user_agent TEXT,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
 
-    # Access logs table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS access_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            action TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            ip_address TEXT,
-            details TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-
-    # Check if we need to create default admin
-    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-    admin_count = cursor.fetchone()[0]
-
-    if admin_count == 0:
-        print("Creating default admin user...")
+    # Check if default admin exists
+    cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',))
+    if not cursor.fetchone():
         admin_password = hash_password('admin123')
         cursor.execute('''
-            INSERT INTO users (email, username, password_hash, full_name, phone_number, 
-                              department, position, is_usc_employee, role, is_active, is_approved)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ('ir@usc.edu.tt', 'admin', admin_password, 'System Administrator', '+1-868-645-3862',
-              'Institutional Research', 'Director', 1, 'admin', 1, 1))
+            INSERT INTO users 
+            (email, username, password_hash, full_name, department, position, role, is_active, is_approved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', ('ir@usc.edu.tt', 'admin', admin_password, 'System Administrator',
+              'Institutional Research', 'Director', 'admin', 1, 1))
         print("Default admin created - Username: admin, Password: admin123")
 
     conn.commit()
     conn.close()
-
-
-def register_user(email, username, password, full_name, phone_number, department, position, is_usc_employee):
-    """Enhanced registration with phone number and employee status"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    cursor.execute('SELECT id FROM users WHERE email = ? OR username = ?',
-                   (email, username))
-    if cursor.fetchone():
-        conn.close()
-        return {'success': False, 'message': 'Email or username already exists'}
-
-    password_hash = hash_password(password)
-    try:
-        cursor.execute('''
-            INSERT INTO users (email, username, password_hash, full_name, phone_number,
-                              department, position, is_usc_employee, role, is_active, is_approved)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (email, username, password_hash, full_name, phone_number,
-              department, position, is_usc_employee, 'user', 1, 0))
-
-        conn.commit()
-        conn.close()
-
-        return {'success': True, 'message': 'Registration successful! Your account is pending admin approval.'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Registration failed: {str(e)}'}
-
-
-def delete_user_from_db(user_id, deleted_by_admin=False):
-    """Delete user from database"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    try:
-        # Delete user sessions first
-        cursor.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
-
-        # Delete the user
-        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
-
-        # Log the action
-        action = "User deleted by admin" if deleted_by_admin else "User deleted own account"
-        cursor.execute('''
-            INSERT INTO access_logs (user_id, action, details)
-            VALUES (?, ?, ?)
-        ''', (user_id, action, f"User ID {user_id} deleted"))
-
-        conn.commit()
-        conn.close()
-        return {'success': True, 'message': 'User deleted successfully'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Failed to delete user: {str(e)}'}
-
-
-def deny_user_approval(user_id):
-    """Deny user approval and remove from database"""
-    return delete_user_from_db(user_id, deleted_by_admin=True)
-
-
-def update_user_info(user_id, full_name=None, phone_number=None, department=None,
-                     position=None, is_usc_employee=None, role=None, is_active=None):
-    """Update user information"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    # Build dynamic update query
-    updates = []
-    values = []
-
-    if full_name is not None:
-        updates.append("full_name = ?")
-        values.append(full_name)
-    if phone_number is not None:
-        updates.append("phone_number = ?")
-        values.append(phone_number)
-    if department is not None:
-        updates.append("department = ?")
-        values.append(department)
-    if position is not None:
-        updates.append("position = ?")
-        values.append(position)
-    if is_usc_employee is not None:
-        updates.append("is_usc_employee = ?")
-        values.append(is_usc_employee)
-    if role is not None:
-        updates.append("role = ?")
-        values.append(role)
-    if is_active is not None:
-        updates.append("is_active = ?")
-        values.append(is_active)
-
-    if not updates:
-        conn.close()
-        return {'success': False, 'message': 'No updates provided'}
-
-    values.append(user_id)
-    query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-
-    try:
-        cursor.execute(query, values)
-        conn.commit()
-        conn.close()
-        return {'success': True, 'message': 'User updated successfully'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Update failed: {str(e)}'}
-
-
-def change_user_password(user_id, current_password, new_password):
-    """Change user password after verifying current password"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    # Get current password hash
-    cursor.execute('SELECT password_hash FROM users WHERE id = ?', (user_id,))
-    result = cursor.fetchone()
-
-    if not result:
-        conn.close()
-        return {'success': False, 'message': 'User not found'}
-
-    if not verify_password(current_password, result[0]):
-        conn.close()
-        return {'success': False, 'message': 'Current password is incorrect'}
-
-    # Update password
-    new_hash = hash_password(new_password)
-    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
-
-    conn.commit()
-    conn.close()
-    return {'success': True, 'message': 'Password changed successfully'}
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'usc-ir-secret-key-2025-change-in-production')
 DATABASE = 'usc_ir_new.db'
@@ -413,11 +251,11 @@ app.index_string = '''
 # ==================== DATABASE SETUP ====================
 
 def init_database():
-    """Initialize database with enhanced user schema"""
+    """Initialize all required database tables"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
-    # Enhanced users table with phone number and employee status
+    # Users table with approval status
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -425,10 +263,8 @@ def init_database():
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             full_name TEXT NOT NULL,
-            phone_number TEXT,
             department TEXT,
             position TEXT,
-            is_usc_employee INTEGER DEFAULT 0,
             role TEXT DEFAULT 'user',
             is_active INTEGER DEFAULT 1,
             is_approved INTEGER DEFAULT 0,
@@ -477,151 +313,14 @@ def init_database():
         print("Creating default admin user...")
         admin_password = hash_password('admin123')
         cursor.execute('''
-            INSERT INTO users (email, username, password_hash, full_name, phone_number, 
-                              department, position, is_usc_employee, role, is_active, is_approved)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ('ir@usc.edu.tt', 'admin', admin_password, 'System Administrator', '+1-868-645-3862',
-              'Institutional Research', 'Director', 1, 'admin', 1, 1))
+            INSERT INTO users (email, username, password_hash, full_name, department, position, role, is_active, is_approved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', ('ir@usc.edu.tt', 'admin', admin_password, 'System Administrator',
+              'Institutional Research', 'Director', 'admin', 1, 1))
         print("Default admin created - Username: admin, Password: admin123")
 
     conn.commit()
     conn.close()
-
-
-def register_user(email, username, password, full_name, phone_number, department, position, is_usc_employee):
-    """Enhanced registration with phone number and employee status"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    cursor.execute('SELECT id FROM users WHERE email = ? OR username = ?',
-                   (email, username))
-    if cursor.fetchone():
-        conn.close()
-        return {'success': False, 'message': 'Email or username already exists'}
-
-    password_hash = hash_password(password)
-    try:
-        cursor.execute('''
-            INSERT INTO users (email, username, password_hash, full_name, phone_number,
-                              department, position, is_usc_employee, role, is_active, is_approved)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (email, username, password_hash, full_name, phone_number,
-              department, position, is_usc_employee, 'user', 1, 0))
-
-        conn.commit()
-        conn.close()
-
-        return {'success': True, 'message': 'Registration successful! Your account is pending admin approval.'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Registration failed: {str(e)}'}
-
-
-def delete_user_from_db(user_id, deleted_by_admin=False):
-    """Delete user from database"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    try:
-        # Delete user sessions first
-        cursor.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
-
-        # Delete the user
-        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
-
-        # Log the action
-        action = "User deleted by admin" if deleted_by_admin else "User deleted own account"
-        cursor.execute('''
-            INSERT INTO access_logs (user_id, action, details)
-            VALUES (?, ?, ?)
-        ''', (user_id, action, f"User ID {user_id} deleted"))
-
-        conn.commit()
-        conn.close()
-        return {'success': True, 'message': 'User deleted successfully'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Failed to delete user: {str(e)}'}
-
-
-def deny_user_approval(user_id):
-    """Deny user approval and remove from database"""
-    return delete_user_from_db(user_id, deleted_by_admin=True)
-
-
-def update_user_info(user_id, full_name=None, phone_number=None, department=None,
-                     position=None, is_usc_employee=None, role=None, is_active=None):
-    """Update user information"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    # Build dynamic update query
-    updates = []
-    values = []
-
-    if full_name is not None:
-        updates.append("full_name = ?")
-        values.append(full_name)
-    if phone_number is not None:
-        updates.append("phone_number = ?")
-        values.append(phone_number)
-    if department is not None:
-        updates.append("department = ?")
-        values.append(department)
-    if position is not None:
-        updates.append("position = ?")
-        values.append(position)
-    if is_usc_employee is not None:
-        updates.append("is_usc_employee = ?")
-        values.append(is_usc_employee)
-    if role is not None:
-        updates.append("role = ?")
-        values.append(role)
-    if is_active is not None:
-        updates.append("is_active = ?")
-        values.append(is_active)
-
-    if not updates:
-        conn.close()
-        return {'success': False, 'message': 'No updates provided'}
-
-    values.append(user_id)
-    query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
-
-    try:
-        cursor.execute(query, values)
-        conn.commit()
-        conn.close()
-        return {'success': True, 'message': 'User updated successfully'}
-    except Exception as e:
-        conn.close()
-        return {'success': False, 'message': f'Update failed: {str(e)}'}
-
-
-def change_user_password(user_id, current_password, new_password):
-    """Change user password after verifying current password"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    # Get current password hash
-    cursor.execute('SELECT password_hash FROM users WHERE id = ?', (user_id,))
-    result = cursor.fetchone()
-
-    if not result:
-        conn.close()
-        return {'success': False, 'message': 'User not found'}
-
-    if not verify_password(current_password, result[0]):
-        conn.close()
-        return {'success': False, 'message': 'Current password is incorrect'}
-
-    # Update password
-    new_hash = hash_password(new_password)
-    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
-
-    conn.commit()
-    conn.close()
-    return {'success': True, 'message': 'Password changed successfully'}
 
 
 # ==================== AUTHENTICATION FUNCTIONS ====================
@@ -871,7 +570,7 @@ def authenticate_user(email_or_username, password):
 def verify_google_token(credential):
     """Verify Google ID token and extract user info"""
     try:
-        client_id = "638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com"
+        client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
 
         idinfo = id_token.verify_oauth2_token(
             credential,
@@ -1598,12 +1297,16 @@ def create_admin_dashboard(user):
     ])
 
 
-# SIMPLE SOLUTION: Direct HTML Google Sign-In Button
-# Replace your Google Sign-In section in create_login_page() with this:
+# 4. REPLACE your existing create_login_page function with this enhanced version:
+# 3. REPLACE your create_login_page() function with this version
+# REPLACE your create_login_page() function with this FIXED version
 
 def create_login_page():
-    """Create login page with direct HTML Google button"""
+    """Create login page with WORKING Google OAuth"""
     return html.Div([
+        # Load Google Sign-In library first
+        html.Script(src="https://accounts.google.com/gsi/client", **{"async": True, "defer": True}),
+
         dbc.Container([
             dbc.Row([
                 dbc.Col([
@@ -1612,31 +1315,48 @@ def create_login_page():
                             html.H3("USC Institutional Research Login", className="text-center mb-0"),
                         ]),
                         dbc.CardBody([
-                            # Google Sign-In Section - DIRECT HTML
+                            # Google Sign-In Section with Debug Info
                             html.Div([
                                 html.H5("Google Sign-In", className="text-center mb-3",
                                         style={"color": USC_COLORS["primary_green"]}),
-                                html.P("Sign in with your Google account:",
+                                html.P("Sign in with your Google account for quick access:",
                                        className="text-center text-muted mb-4"),
 
-                                # Direct HTML using dcc.Markdown with dangerously_allow_html=True
-                                dcc.Markdown("""
-                                <div style="text-align: center; margin: 20px 0;">
-                                    <div id="g_id_onload"
-                                         data-client_id="890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
-                                         data-callback="handleCredentialResponse"
-                                         data-auto_prompt="false">
-                                    </div>
-                                    <div class="g_id_signin" 
-                                         data-width="300" 
-                                         data-height="50" 
-                                         data-longtitle="true" 
-                                         data-theme="filled_blue">
-                                    </div>
-                                </div>
-                                """, dangerously_allow_html=True),
+                                # Status indicator
+                                html.Div(id="google-status", className="text-center mb-2", children=[
+                                    html.Small("Initializing Google Sign-In...", className="text-muted")
+                                ]),
 
-                                # Store for credential
+                                # Google Sign-In Button Container
+                                html.Div(
+                                    id="google-signin-div",
+                                    style={
+                                        "minHeight": "60px",
+                                        "border": "2px dashed #007bff",
+                                        "borderRadius": "8px",
+                                        "display": "flex",
+                                        "alignItems": "center",
+                                        "justifyContent": "center",
+                                        "margin": "15px 0",
+                                        "backgroundColor": "#f8f9fa",
+                                        "padding": "15px"
+                                    },
+                                    children=[
+                                        html.Div([
+                                            html.I(className="fas fa-spinner fa-spin me-2"),
+                                            "Loading Google Sign-In..."
+                                        ], className="text-muted")
+                                    ]
+                                ),
+
+                                # Manual fallback button
+                                dbc.Button([
+                                    html.I(className="fab fa-google me-2"),
+                                    "Try Manual Google Sign-In"
+                                ], id="manual-google-btn", color="outline-primary", size="sm",
+                                    className="w-100 mb-3", style={"display": "none"}),
+
+                                # Hidden input to store Google credential
                                 dcc.Store(id="google-credential-store", data=None),
 
                                 dbc.Alert([
@@ -1647,67 +1367,105 @@ def create_login_page():
 
                             html.Hr(className="my-4"),
 
-                            # Keep your existing USC Employee section
+                            # USC Employee Quick Login Section (keep your existing one)
                             html.Div([
                                 html.H5("USC Employees - Quick Access", className="text-center mb-3",
                                         style={"color": USC_COLORS["primary_green"]}),
+                                html.P("USC employees can get instant access by entering their details below:",
+                                       className="text-center text-muted mb-4"),
+
                                 dbc.Form([
                                     dbc.Row([
+                                        dbc.Label("USC Email", html_for="usc-email", width=12),
                                         dbc.Col([
-                                            dbc.Input(type="email", id="usc-email",
-                                                      placeholder="firstname.lastname@usc.edu.tt", className="mb-3")
-                                        ])
+                                            dbc.Input(
+                                                type="email",
+                                                id="usc-email",
+                                                placeholder="firstname.lastname@usc.edu.tt",
+                                                className="mb-3"
+                                            )
+                                        ], width=12)
                                     ]),
                                     dbc.Row([
+                                        dbc.Label("Full Name", html_for="usc-name", width=12),
                                         dbc.Col([
-                                            dbc.Input(type="text", id="usc-name",
-                                                      placeholder="Enter your full name", className="mb-3")
-                                        ])
+                                            dbc.Input(
+                                                type="text",
+                                                id="usc-name",
+                                                placeholder="Enter your full name",
+                                                className="mb-3"
+                                            )
+                                        ], width=12)
                                     ]),
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Button([
                                                 html.I(className="fas fa-university me-2"),
                                                 "USC Employee Login"
-                                            ], id="usc-login-btn", color="success", className="w-100", size="lg")
-                                        ])
+                                            ], id="usc-login-btn", color="success",
+                                                className="w-100", size="lg")
+                                        ], width=12)
                                     ])
-                                ])
+                                ]),
+
+                                dbc.Alert([
+                                    html.I(className="fas fa-info-circle me-2"),
+                                    "USC employees (@usc.edu.tt) get automatic access to all data except financial reports."
+                                ], color="info", className="mt-3")
                             ]),
 
                             html.Hr(className="my-4"),
 
-                            # Keep your existing Traditional Login section
+                            # Traditional Login Section (keep exactly as is)
                             html.Div([
-                                html.H5("Traditional Login", className="text-center mb-3"),
+                                html.H5("Traditional Login", className="text-center mb-3",
+                                        style={"color": USC_COLORS["secondary_green"]}),
+
                                 dbc.Form([
                                     dbc.Row([
+                                        dbc.Label("Email or Username", html_for="login-email", width=12),
                                         dbc.Col([
-                                            dbc.Input(type="text", id="login-email",
-                                                      placeholder="Enter email or username",
-                                                      className="mb-3", value="admin")
-                                        ])
+                                            dbc.Input(
+                                                type="text",
+                                                id="login-email",
+                                                placeholder="Enter your email or username",
+                                                className="mb-3",
+                                                value="admin"  # Pre-fill for testing
+                                            )
+                                        ], width=12)
                                     ]),
                                     dbc.Row([
+                                        dbc.Label("Password", html_for="login-password", width=12),
                                         dbc.Col([
-                                            dbc.Input(type="password", id="login-password",
-                                                      placeholder="Enter password",
-                                                      className="mb-3", value="admin123")
-                                        ])
+                                            dbc.Input(
+                                                type="password",
+                                                id="login-password",
+                                                placeholder="Enter your password",
+                                                className="mb-3",
+                                                value="admin123"  # Pre-fill for testing
+                                            )
+                                        ], width=12)
                                     ]),
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Button([
                                                 html.I(className="fas fa-sign-in-alt me-2"),
                                                 "Sign In"
-                                            ], id="login-submit", color="primary", className="w-100", size="lg")
-                                        ])
+                                            ], id="login-submit", color="primary",
+                                                className="w-100", size="lg")
+                                        ], width=12)
                                     ])
-                                ])
+                                ]),
+
+                                dbc.Alert([
+                                    html.I(className="fas fa-user me-2"),
+                                    "Test credentials - Username: admin, Password: admin123"
+                                ], color="secondary", className="mt-3")
                             ]),
 
-                            # Links section
                             html.Hr(className="my-4"),
+
+                            # Links Section (keep as is)
                             html.Div([
                                 dbc.Row([
                                     dbc.Col([
@@ -1716,6 +1474,13 @@ def create_login_page():
                                             dcc.Link("Register here", href="/register",
                                                      style={"color": USC_COLORS["primary_green"]})
                                         ], className="text-center mb-2")
+                                    ], width=12),
+                                    dbc.Col([
+                                        html.P([
+                                            "Need access? ",
+                                            dcc.Link("Request access", href="/request",
+                                                     style={"color": USC_COLORS["secondary_green"]})
+                                        ], className="text-center mb-0")
                                     ], width=12)
                                 ])
                             ]),
@@ -1725,64 +1490,193 @@ def create_login_page():
                         ])
                     ], className="shadow")
                 ], md=8, lg=6, className="mx-auto")
-            ])
+            ], className="justify-content-center min-vh-100 align-items-center")
         ], fluid=True, className="py-5", style={"backgroundColor": "#f8f9fa"}),
 
-        # Google library and JavaScript
-        html.Script(src="https://accounts.google.com/gsi/client", **{"async": True, "defer": True}),
-
-        # Simple credential handler
+        # ENHANCED JavaScript with better error handling and debugging
         html.Script("""
-            function handleCredentialResponse(response) {
-                console.log('🎉 Google credential received!', response.credential.length);
+            let googleInitialized = false;
+            let initAttempts = 0;
+            const maxAttempts = 10;
 
-                // Show success message immediately
-                const alertDiv = document.getElementById('login-alert');
-                if (alertDiv) {
-                    alertDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="fas fa-spinner fa-spin me-2"></i>
-                            Google Sign-In successful! Processing login...
-                        </div>
-                    `;
+            function updateStatus(message, isError = false) {
+                console.log('🔍 GOOGLE: ' + message);
+
+                const statusEl = document.getElementById('google-status');
+                if (statusEl) {
+                    const color = isError ? 'text-danger' : 'text-success';
+                    const icon = isError ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+                    statusEl.innerHTML = `<small class="${color}"><i class="${icon} me-1"></i>${message}</small>`;
                 }
+            }
 
-                // Send to backend - multiple methods for reliability
+            function showManualButton() {
+                const manualBtn = document.getElementById('manual-google-btn');
+                if (manualBtn) {
+                    manualBtn.style.display = 'block';
+                }
+            }
 
-                // Method 1: Store in window for polling
-                window.googleCredential = response.credential;
+            function handleCredentialResponse(response) {
+                updateStatus('🎉 Google credential received!');
+                console.log('🔍 Credential length:', response.credential.length);
 
-                // Method 2: Try Dash clientside
                 try {
+                    // Store credential using multiple methods for reliability
                     if (window.dash_clientside && window.dash_clientside.set_props) {
                         window.dash_clientside.set_props("google-credential-store", {
                             data: response.credential
                         });
+                        updateStatus('Credential sent to backend');
+                    } else {
+                        // Fallback method
+                        window.googleCredential = response.credential;
+                        const event = new CustomEvent('google-credential-ready', {
+                            detail: { credential: response.credential }
+                        });
+                        document.dispatchEvent(event);
+                        updateStatus('Credential stored (fallback method)');
                     }
-                } catch (e) {
-                    console.log('Dash clientside not available');
+                } catch (error) {
+                    updateStatus('Error processing credential: ' + error.message, true);
                 }
-
-                // Method 3: Custom event
-                const event = new CustomEvent('google-login-success', {
-                    detail: { credential: response.credential }
-                });
-                document.dispatchEvent(event);
             }
 
-            // Poll for credentials (fallback method)
-            setInterval(function() {
-                if (window.googleCredential && window.dash_clientside) {
+            function triggerManualGoogleSignIn() {
+                updateStatus('Triggering manual Google sign-in...');
+
+                if (typeof google !== 'undefined' && google.accounts) {
                     try {
-                        window.dash_clientside.set_props("google-credential-store", {
-                            data: window.googleCredential
+                        google.accounts.id.prompt((notification) => {
+                            if (notification.isNotDisplayed()) {
+                                updateStatus('Sign-in blocked: ' + notification.getNotDisplayedReason(), true);
+                            } else {
+                                updateStatus('Manual sign-in triggered successfully');
+                            }
                         });
-                        window.googleCredential = null; // Clear after sending
-                    } catch (e) {
-                        // Ignore errors
+                    } catch (error) {
+                        updateStatus('Manual sign-in error: ' + error.message, true);
                     }
+                } else {
+                    updateStatus('Google library not available', true);
                 }
-            }, 1000);
+            }
+
+            function initializeGoogleSignIn() {
+                initAttempts++;
+                updateStatus(`Attempting to initialize Google Sign-In (${initAttempts}/${maxAttempts})...`);
+
+                // Check if Google library is loaded
+                if (typeof google === 'undefined') {
+                    updateStatus('Google library not found', true);
+                    if (initAttempts < maxAttempts) {
+                        setTimeout(initializeGoogleSignIn, 2000);
+                    } else {
+                        updateStatus('Failed to load Google library after maximum attempts', true);
+                        showManualButton();
+                    }
+                    return;
+                }
+
+                // Check if Google Accounts API is available
+                if (!google.accounts) {
+                    updateStatus('Google Accounts API not ready', true);
+                    if (initAttempts < maxAttempts) {
+                        setTimeout(initializeGoogleSignIn, 2000);
+                    } else {
+                        updateStatus('Google Accounts API failed to load', true);
+                        showManualButton();
+                    }
+                    return;
+                }
+
+                if (googleInitialized) {
+                    updateStatus('Google already initialized');
+                    return;
+                }
+
+                try {
+                    updateStatus('Initializing Google OAuth...');
+
+                    // Initialize Google Sign-In
+                    google.accounts.id.initialize({
+                        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
+                        callback: handleCredentialResponse,
+                        auto_select: false,
+                        cancel_on_tap_outside: false
+                    });
+
+                    updateStatus('Google OAuth initialized, rendering button...');
+
+                    const signInDiv = document.getElementById("google-signin-div");
+                    if (signInDiv) {
+                        // Clear loading content
+                        signInDiv.innerHTML = '';
+
+                        // Render the Google Sign-In button
+                        google.accounts.id.renderButton(signInDiv, {
+                            theme: "filled_blue",
+                            size: "large",
+                            width: "300",
+                            text: "signin_with",
+                            logo_alignment: "left"
+                        });
+
+                        googleInitialized = true;
+                        updateStatus('✅ Google Sign-In ready! Click the button above.');
+
+                        // Remove debug styling
+                        signInDiv.style.border = '1px solid #ddd';
+                        signInDiv.style.backgroundColor = 'white';
+
+                        // Verify button was rendered
+                        setTimeout(() => {
+                            const button = signInDiv.querySelector('iframe, div[role="button"]');
+                            if (button) {
+                                updateStatus('✅ Google button is interactive');
+                            } else {
+                                updateStatus('⚠️ Button rendered but may not be interactive', true);
+                                showManualButton();
+                            }
+                        }, 1000);
+
+                    } else {
+                        updateStatus('Could not find button container', true);
+                    }
+
+                } catch (error) {
+                    updateStatus('Initialization error: ' + error.message, true);
+                    console.error('Google Sign-In initialization error:', error);
+                    showManualButton();
+                }
+            }
+
+            // Set up event listeners
+            document.addEventListener('DOMContentLoaded', function() {
+                updateStatus('DOM loaded, starting Google Sign-In setup...');
+
+                // Manual button event listener
+                const manualBtn = document.getElementById('manual-google-btn');
+                if (manualBtn) {
+                    manualBtn.addEventListener('click', triggerManualGoogleSignIn);
+                }
+
+                // Start initialization
+                setTimeout(initializeGoogleSignIn, 1000);
+            });
+
+            // Progressive retry strategy
+            setTimeout(initializeGoogleSignIn, 2000);
+            setTimeout(initializeGoogleSignIn, 5000);
+            setTimeout(initializeGoogleSignIn, 10000);
+
+            // Listen for window load event as backup
+            window.addEventListener('load', function() {
+                if (!googleInitialized) {
+                    updateStatus('Window loaded, retrying Google initialization...');
+                    setTimeout(initializeGoogleSignIn, 1000);
+                }
+            });
         """)
     ])
 
@@ -1797,94 +1691,6 @@ def create_login_page():
      State('usc-name', 'value')],
     prevent_initial_call=True
 )
-def load_admin_users_table_content(session_data):
-    """Load users table content for admin - ADD THIS FUNCTION TO YOUR MAIN APP"""
-    user = validate_session(session_data.get('token'))
-    if not user or user['role'] != 'admin':
-        return ""
-
-    conn = sqlite3.connect(DATABASE)
-    df = pd.read_sql_query('''
-        SELECT id, username, full_name, email, phone_number, department, position,
-               CASE WHEN is_usc_employee = 1 THEN 'Yes' ELSE 'No' END as usc_employee,
-               role, 
-               CASE WHEN is_active = 1 THEN 'Active' ELSE 'Inactive' END as status,
-               CASE WHEN is_approved = 1 THEN 'Approved' ELSE 'Pending' END as approval_status,
-               created_at
-        FROM users 
-        ORDER BY created_at DESC
-    ''', conn)
-    conn.close()
-
-    if df.empty:
-        return dbc.Alert("No users found", color="info")
-
-    # Create table rows with action buttons
-    table_rows = []
-    for _, row in df.iterrows():
-        action_buttons = html.Div([
-            dbc.Button("Edit", id={'type': 'edit-user', 'user_id': row['id']},
-                       size="sm", color="primary", className="me-1"),
-            dbc.Button("Approve", id=f"approve-user-{row['id']}",
-                       size="sm", color="success", className="me-1")
-            if row['approval_status'] == 'Pending' else None,
-            dbc.Button("Deny", id=f"deny-user-{row['id']}",
-                       size="sm", color="danger")
-            if row['approval_status'] == 'Pending' else None
-        ])
-
-        # Status badge
-        status_badge = dbc.Badge(
-            row['status'],
-            color="success" if row['status'] == 'Active' else "danger"
-        )
-
-        # Approval badge
-        approval_badge = dbc.Badge(
-            row['approval_status'],
-            color="success" if row['approval_status'] == 'Approved' else "warning"
-        )
-
-        table_row = html.Tr([
-            html.Td(row['id']),
-            html.Td(row['username']),
-            html.Td(row['full_name']),
-            html.Td(row['email']),
-            html.Td(row['phone_number'] or 'N/A'),
-            html.Td(row['department'] or 'N/A'),
-            html.Td(row['usc_employee']),
-            html.Td(dbc.Badge(row['role'].title(),
-                              color="danger" if row['role'] == 'admin' else "primary")),
-            html.Td(status_badge),
-            html.Td(approval_badge),
-            html.Td(row['created_at'][:10] if row['created_at'] else 'N/A'),
-            html.Td(action_buttons)
-        ])
-        table_rows.append(table_row)
-
-    return html.Div([
-        html.H5(f"Total Users: {len(df)}", className="mb-3"),
-        dbc.Table([
-            html.Thead([
-                html.Tr([
-                    html.Th("ID"),
-                    html.Th("Username"),
-                    html.Th("Full Name"),
-                    html.Th("Email"),
-                    html.Th("Phone"),
-                    html.Th("Department"),
-                    html.Th("USC Employee"),
-                    html.Th("Role"),
-                    html.Th("Status"),
-                    html.Th("Approval"),
-                    html.Th("Created"),
-                    html.Th("Actions")
-                ])
-            ]),
-            html.Tbody(table_rows)
-        ], striped=True, bordered=True, hover=True, responsive=True, size="sm")
-    ])
-
 def handle_usc_employee_login(n_clicks, email, name):
     """Handle USC employee login"""
     if not n_clicks:
@@ -1998,7 +1804,7 @@ function handleCredentialResponse(response) {{
 
 window.onload = function() {{
     google.accounts.id.initialize({{
-        client_id: "638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com",
+        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
         callback: handleCredentialResponse
     }});
 
@@ -2018,9 +1824,8 @@ window.onload = function() {{
 </script>
 """
 
-
 def create_register_page():
-    """Enhanced registration page with conditional fields"""
+    """Create registration page"""
     return dbc.Container([
         dbc.Row([
             dbc.Col([
@@ -2035,403 +1840,72 @@ def create_register_page():
                         dbc.Alert([
                             html.I(className="fas fa-info-circle me-2"),
                             "Note: New accounts require admin approval before you can login."
-                        ], color="info"),
+                        ], color="info", className="mb-4"),
+
+                        html.Div(id="register-alert", className="mb-3"),
 
                         dbc.Form([
-                            # Basic Information
-                            html.H5("Basic Information", className="mb-3"),
                             dbc.Row([
                                 dbc.Col([
-                                    dbc.Label("Full Name *"),
-                                    dbc.Input(id="register-fullname", type="text", placeholder="John Doe")
+                                    dbc.Label("Email *", className="fw-bold"),
+                                    dbc.Input(id="register-email", type="email",
+                                              placeholder="your.email@usc.edu.tt"),
                                 ], md=6),
                                 dbc.Col([
-                                    dbc.Label("Email Address *"),
-                                    dbc.Input(id="register-email", type="email", placeholder="john.doe@example.com")
+                                    dbc.Label("Username *", className="fw-bold"),
+                                    dbc.Input(id="register-username", type="text",
+                                              placeholder="Choose username"),
                                 ], md=6)
                             ], className="mb-3"),
 
                             dbc.Row([
                                 dbc.Col([
-                                    dbc.Label("Username *"),
-                                    dbc.Input(id="register-username", type="text", placeholder="johndoe")
-                                ], md=6),
-                                dbc.Col([
-                                    dbc.Label("Phone Number *"),
-                                    dbc.Input(id="register-phone", type="tel", placeholder="+1-868-123-4567")
-                                ], md=6)
-                            ], className="mb-3"),
-
-                            # Employment Status
-                            html.H5("Employment Status", className="mb-3 mt-4"),
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label("Are you a USC employee?"),
-                                    dcc.RadioItems(
-                                        id="register-usc-employee",
-                                        options=[
-                                            {"label": " Yes, I am a USC employee", "value": True},
-                                            {"label": " No, I am external to USC", "value": False}
-                                        ],
-                                        value=None,
-                                        className="mb-3"
-                                    )
+                                    dbc.Label("Full Name *", className="fw-bold"),
+                                    dbc.Input(id="register-fullname", type="text",
+                                              placeholder="Enter your full name"),
                                 ])
-                            ]),
+                            ], className="mb-3"),
 
-                            # Conditional Fields
-                            html.Div(id="register-conditional-fields"),
-
-                            # Password Section
-                            html.H5("Security", className="mb-3 mt-4"),
                             dbc.Row([
                                 dbc.Col([
-                                    dbc.Label("Password *"),
-                                    dbc.Input(id="register-password", type="password",
-                                              placeholder="Minimum 8 characters")
+                                    dbc.Label("Department", className="fw-bold"),
+                                    dbc.Input(id="register-department", type="text",
+                                              placeholder="e.g., Finance, Academic Affairs"),
                                 ], md=6),
                                 dbc.Col([
-                                    dbc.Label("Confirm Password *"),
-                                    dbc.Input(id="register-confirm", type="password", placeholder="Re-enter password")
+                                    dbc.Label("Position", className="fw-bold"),
+                                    dbc.Input(id="register-position", type="text",
+                                              placeholder="e.g., Analyst, Manager"),
+                                ], md=6)
+                            ], className="mb-3"),
+
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label("Password *", className="fw-bold"),
+                                    dbc.Input(id="register-password", type="password",
+                                              placeholder="Minimum 8 characters"),
+                                    dbc.FormText("Must be at least 8 characters")
+                                ], md=6),
+                                dbc.Col([
+                                    dbc.Label("Confirm Password *", className="fw-bold"),
+                                    dbc.Input(id="register-confirm", type="password",
+                                              placeholder="Re-enter password"),
                                 ], md=6)
                             ], className="mb-4"),
 
-                            html.Div(id="register-alert"),
-
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Button([
-                                        html.I(className="fas fa-user-plus me-2"),
-                                        "Create Account"
-                                    ], id="register-submit", color="success", size="lg", className="w-100")
-                                ], md=6),
-                                dbc.Col([
-                                    dbc.Button([
-                                        html.I(className="fas fa-sign-in-alt me-2"),
-                                        "Login Instead"
-                                    ], href="/login", color="outline-primary", size="lg", className="w-100")
-                                ], md=6)
-                            ])
+                            dbc.Button([
+                                html.I(className="fas fa-user-plus me-2"),
+                                "Register"
+                            ], id="register-submit", color="success", size="lg",
+                                className="w-100", n_clicks=0, style={"borderRadius": "0"})
                         ])
                     ])
                 ])
-            ], md=8, lg=6)
-        ], justify="center")
+            ], md=8, className="mx-auto")
+        ])
     ], className="py-5")
 
 
-def create_admin_user_settings():
-    """Create admin user settings page for managing all users"""
-    return html.Div([
-        html.H4("User Management"),
-        html.P("Manage user accounts, permissions, and settings."),
-
-        # Users table
-        html.Div(id="admin-users-table"),
-
-        # User edit modal
-        dbc.Modal([
-            dbc.ModalHeader("Edit User"),
-            dbc.ModalBody([
-                dbc.Form([
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("Full Name"),
-                            dbc.Input(id="edit-user-fullname")
-                        ], md=6),
-                        dbc.Col([
-                            dbc.Label("Phone Number"),
-                            dbc.Input(id="edit-user-phone")
-                        ], md=6)
-                    ], className="mb-3"),
-
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("Department"),
-                            dbc.Input(id="edit-user-department")
-                        ], md=6),
-                        dbc.Col([
-                            dbc.Label("Position"),
-                            dbc.Input(id="edit-user-position")
-                        ], md=6)
-                    ], className="mb-3"),
-
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("Role"),
-                            dbc.Select(
-                                id="edit-user-role",
-                                options=[
-                                    {"label": "User", "value": "user"},
-                                    {"label": "Admin", "value": "admin"}
-                                ]
-                            )
-                        ], md=6),
-                        dbc.Col([
-                            dbc.Label("Status"),
-                            dbc.Select(
-                                id="edit-user-status",
-                                options=[
-                                    {"label": "Active", "value": 1},
-                                    {"label": "Inactive", "value": 0}
-                                ]
-                            )
-                        ], md=6)
-                    ], className="mb-3"),
-
-                    html.Hr(),
-                    html.H6("Reset Password", className="text-warning"),
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("New Password (leave blank to keep current)"),
-                            dbc.Input(id="edit-user-password", type="password")
-                        ])
-                    ], className="mb-3"),
-
-                    html.Div(id="edit-user-alert")
-                ])
-            ]),
-            dbc.ModalFooter([
-                dbc.Button("Save Changes", id="save-user-changes", color="primary"),
-                dbc.Button("Delete User", id="delete-user-btn", color="danger", className="ms-2"),
-                dbc.Button("Cancel", id="cancel-edit-user", className="ms-auto")
-            ])
-        ], id="edit-user-modal", size="lg"),
-
-        # Store for selected user ID
-        dcc.Store(id="selected-user-id")
-    ])
-
-
-@app.callback(
-    Output('admin-users-table', 'children'),
-    [Input('url', 'pathname'),
-     Input('admin-tabs', 'active_tab')],
-    [State('session-store', 'data')]
-)
-def load_admin_users_table(pathname, active_tab, session_data):
-    """Load users table for admin"""
-    if pathname != '/admin' or active_tab != 'users' or not session_data:
-        return ""
-
-    return load_admin_users_table_content(session_data)
-
-
-# Pattern matching callbacks for dynamic buttons
-@app.callback(
-    [Output('edit-user-modal', 'is_open'),
-     Output('selected-user-id', 'data'),
-     Output('edit-user-fullname', 'value'),
-     Output('edit-user-phone', 'value'),
-     Output('edit-user-department', 'value'),
-     Output('edit-user-position', 'value'),
-     Output('edit-user-role', 'value'),
-     Output('edit-user-status', 'value')],
-    [Input({'type': 'edit-user', 'user_id': dash.dependencies.ALL}, 'n_clicks')],
-    [State('session-store', 'data')],
-    prevent_initial_call=True
-)
-def open_edit_user_modal(n_clicks_list, session_data):
-    """Open edit user modal and populate with user data"""
-    ctx = callback_context
-    if not ctx.triggered or not any(n_clicks_list) or not session_data:
-        return False, None, "", "", "", "", "user", 1
-
-    user = validate_session(session_data.get('token'))
-    if not user or user['role'] != 'admin':
-        return False, None, "", "", "", "", "user", 1
-
-    # Get the user ID from the triggered button
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    user_id = eval(button_id)['user_id']
-
-    # Fetch user data
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT full_name, phone_number, department, position, role, is_active
-        FROM users WHERE id = ?
-    ''', (user_id,))
-
-    user_data = cursor.fetchone()
-    conn.close()
-
-    if user_data:
-        return (True, user_id, user_data[0] or "", user_data[1] or "",
-                user_data[2] or "", user_data[3] or "", user_data[4], user_data[5])
-
-    return False, None, "", "", "", "", "user", 1
-
-
-@app.callback(
-    [Output('edit-user-modal', 'is_open', allow_duplicate=True),
-     Output('edit-user-alert', 'children'),
-     Output('admin-users-table', 'children', allow_duplicate=True)],
-    [Input('save-user-changes', 'n_clicks'),
-     Input('delete-user-btn', 'n_clicks'),
-     Input('cancel-edit-user', 'n_clicks')],
-    [State('selected-user-id', 'data'),
-     State('edit-user-fullname', 'value'),
-     State('edit-user-phone', 'value'),
-     State('edit-user-department', 'value'),
-     State('edit-user-position', 'value'),
-     State('edit-user-role', 'value'),
-     State('edit-user-status', 'value'),
-     State('edit-user-password', 'value'),
-     State('session-store', 'data')],
-    prevent_initial_call=True
-)
-def handle_user_edit_actions(save_clicks, delete_clicks, cancel_clicks, user_id,
-                             fullname, phone, department, position, role, status, password, session_data):
-    """Handle user edit modal actions"""
-    ctx = callback_context
-    if not ctx.triggered or not session_data:
-        return dash.no_update, "", dash.no_update
-
-    user = validate_session(session_data.get('token'))
-    if not user or user['role'] != 'admin':
-        return False, dbc.Alert("Unauthorized", color="danger"), dash.no_update
-
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    if trigger_id == 'cancel-edit-user':
-        return False, "", dash.no_update
-
-    if trigger_id == 'delete-user-btn' and delete_clicks and user_id:
-        result = delete_user_from_db(user_id, deleted_by_admin=True)
-        if result['success']:
-            return False, "", load_admin_users_table_content(session_data)
-        else:
-            return dash.no_update, dbc.Alert(result['message'], color="danger"), dash.no_update
-
-    if trigger_id == 'save-user-changes' and save_clicks and user_id:
-        # Update user information
-        update_result = update_user_info(user_id, fullname, phone, department, position,
-                                         None, role, status)
-
-        # Update password if provided
-        if password and len(password) >= 8:
-            conn = sqlite3.connect(DATABASE)
-            cursor = conn.cursor()
-            password_hash = hash_password(password)
-            cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
-            conn.commit()
-            conn.close()
-
-        if update_result['success']:
-            return False, "", load_admin_users_table_content(session_data)
-        else:
-            return dash.no_update, dbc.Alert(update_result['message'], color="danger"), dash.no_update
-
-    return dash.no_update, "", dash.no_update
-
-
-# JavaScript for approve/deny buttons
-app.clientside_callback(
-    """
-    function(pathname) {
-        setTimeout(function() {
-            // Approve buttons
-            document.querySelectorAll('[id^="approve-user-"]').forEach(function(btn) {
-                btn.onclick = function() {
-                    var userId = this.id.split('-')[2];
-                    if (confirm('Approve this user?')) {
-                        fetch('/api/approve-user/' + userId, {method: 'POST'})
-                            .then(() => location.reload());
-                    }
-                };
-            });
-
-            // Deny buttons
-            document.querySelectorAll('[id^="deny-user-"]').forEach(function(btn) {
-                btn.onclick = function() {
-                    var userId = this.id.split('-')[2];
-                    if (confirm('Deny and remove this user? This action cannot be undone.')) {
-                        fetch('/api/deny-user/' + userId, {method: 'POST'})
-                            .then(() => location.reload());
-                    }
-                };
-            });
-        }, 500);
-        return '';
-    }
-    """,
-    Output('admin-content', 'style'),
-    Input('url', 'pathname')
-)
-def create_user_settings_page(current_user):
-    """Create user settings page for logged-in users"""
-    return dbc.Container([
-        html.H2([html.I(className="fas fa-user-cog me-2"), "User Settings"]),
-        html.Hr(),
-
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader("Personal Information"),
-                    dbc.CardBody([
-                        dbc.Form([
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label("Full Name"),
-                                    dbc.Input(id="user-fullname", value=current_user['full_name'])
-                                ], md=6),
-                                dbc.Col([
-                                    dbc.Label("Phone Number"),
-                                    dbc.Input(id="user-phone", value=current_user['phone_number'] or "")
-                                ], md=6)
-                            ], className="mb-3"),
-
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label("Department"),
-                                    dbc.Input(id="user-department", value=current_user['department'] or "")
-                                ], md=6),
-                                dbc.Col([
-                                    dbc.Label("Position"),
-                                    dbc.Input(id="user-position", value=current_user['position'] or "")
-                                ], md=6)
-                            ], className="mb-3"),
-
-                            html.Div(id="user-info-alert"),
-                            dbc.Button("Update Information", id="update-user-info", color="primary")
-                        ])
-                    ])
-                ])
-            ], md=6),
-
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader("Security Settings"),
-                    dbc.CardBody([
-                        dbc.Form([
-                            dbc.Label("Current Password"),
-                            dbc.Input(id="current-password", type="password"),
-                            html.Br(),
-                            dbc.Label("New Password"),
-                            dbc.Input(id="new-password", type="password"),
-                            html.Br(),
-                            dbc.Label("Confirm New Password"),
-                            dbc.Input(id="confirm-new-password", type="password"),
-                            html.Br(),
-                            html.Div(id="password-change-alert"),
-                            dbc.Button("Change Password", id="change-password-btn", color="warning", className="mb-3"),
-
-                            html.Hr(),
-                            html.H6("Danger Zone", className="text-danger"),
-                            html.P("Delete your account permanently. This action cannot be undone.",
-                                   className="text-muted small"),
-                            dbc.Button("Delete My Account", id="delete-self-btn", color="danger", outline=True),
-                            dcc.ConfirmDialog(
-                                id="confirm-delete-self",
-                                message="Are you sure you want to delete your account? This action cannot be undone.",
-                            )
-                        ])
-                    ])
-                ])
-            ], md=6)
-        ])
-    ], className="py-4")
 def create_home_page(user=None):
     """Create home page with original design"""
     if user:
@@ -2745,97 +2219,6 @@ def get_users_content():
     ])
 
 
-@app.callback(
-    Output('register-conditional-fields', 'children'),
-    [Input('register-usc-employee', 'value')]
-)
-def update_conditional_fields(is_usc_employee):
-    """Update registration fields based on employee status"""
-    if is_usc_employee is None:
-        return html.Div()
-
-    if is_usc_employee:
-        # USC Employee fields
-        return dbc.Row([
-            dbc.Col([
-                dbc.Label("Department *"),
-                dbc.Select(
-                    id="register-department",
-                    options=[
-                        {"label": "Academic Affairs", "value": "Academic Affairs"},
-                        {"label": "Admissions", "value": "Admissions"},
-                        {"label": "Business & Finance", "value": "Business & Finance"},
-                        {"label": "Human Resources", "value": "Human Resources"},
-                        {"label": "Institutional Research", "value": "Institutional Research"},
-                        {"label": "IT Services", "value": "IT Services"},
-                        {"label": "Library", "value": "Library"},
-                        {"label": "Student Services", "value": "Student Services"},
-                        {"label": "Other", "value": "Other"}
-                    ],
-                    placeholder="Select your department"
-                )
-            ], md=6),
-            dbc.Col([
-                dbc.Label("Position *"),
-                dbc.Input(id="register-position", type="text", placeholder="e.g., Assistant Registrar")
-            ], md=6)
-        ], className="mb-3")
-    else:
-        # External user fields
-        return dbc.Row([
-            dbc.Col([
-                dbc.Label("Organization/Institution *"),
-                dbc.Input(id="register-department", type="text", placeholder="e.g., Ministry of Education")
-            ], md=6),
-            dbc.Col([
-                dbc.Label("Position/Role *"),
-                dbc.Input(id="register-position", type="text", placeholder="e.g., Data Analyst")
-            ], md=6)
-        ], className="mb-3")
-
-
-@app.callback(
-    [Output('register-alert', 'children'),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('register-submit', 'n_clicks')],
-    [State('register-email', 'value'),
-     State('register-username', 'value'),
-     State('register-password', 'value'),
-     State('register-confirm', 'value'),
-     State('register-fullname', 'value'),
-     State('register-phone', 'value'),
-     State('register-department', 'value'),
-     State('register-position', 'value'),
-     State('register-usc-employee', 'value')],
-    prevent_initial_call=True
-)
-def handle_register(n_clicks, email, username, password, confirm, fullname, phone, department, position,
-                    is_usc_employee):
-    """Handle enhanced registration"""
-    if not n_clicks:
-        return "", dash.no_update
-
-    if not all([email, username, password, fullname, phone]):
-        return dbc.Alert("Please fill all required fields", color="warning"), dash.no_update
-
-    if is_usc_employee is None:
-        return dbc.Alert("Please select if you are a USC employee", color="warning"), dash.no_update
-
-    if not department or not position:
-        return dbc.Alert("Please provide department and position information", color="warning"), dash.no_update
-
-    if password != confirm:
-        return dbc.Alert("Passwords do not match", color="danger"), dash.no_update
-
-    if len(password) < 8:
-        return dbc.Alert("Password must be at least 8 characters", color="warning"), dash.no_update
-
-    result = register_user(email, username, password, fullname, phone, department, position, is_usc_employee)
-
-    if result['success']:
-        return dbc.Alert(result['message'], color="success"), "/login"
-    else:
-        return dbc.Alert(result['message'], color="danger"), dash.no_update
 # Add callbacks for user management
 @app.callback(
     Output("user-mgmt-content", "children"),
@@ -2901,241 +2284,90 @@ app.layout = html.Div([
 
 
 # ==================== CALLBACKS ====================
-# Add these Flask routes to handle user approval/denial
-from flask import request, jsonify
 
-@app.server.route('/api/approve-user/<int:user_id>', methods=['POST'])
-def api_approve_user(user_id):
-    """API endpoint to approve user"""
-    try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET is_approved = 1, approved_at = ? WHERE id = ?',
-                      (datetime.now(), user_id))
-        conn.commit()
-        conn.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.server.route('/api/deny-user/<int:user_id>', methods=['POST'])
-def api_deny_user(user_id):
-    """API endpoint to deny user"""
-    try:
-        result = deny_user_approval(user_id)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
 @app.callback(
-    Output('page-content', 'children'),
+    [Output('navbar-container', 'children'),
+     Output('page-content', 'children')],
     [Input('url', 'pathname')],
     [State('session-store', 'data')]
 )
 def display_page(pathname, session_data):
-    """Main routing function"""
-    user = validate_session(session_data.get('token')) if session_data else None
+    """Main router callback with debug logging"""
+    print(f"🔍 DEBUG: Accessing pathname: {pathname}")
+    print(f"🔍 DEBUG: Session data: {session_data}")
+
+    user = None
+    if session_data and 'token' in session_data:
+        print("🔍 DEBUG: Token found in session, validating...")
+        user = validate_session(session_data['token'])
+        print(f"🔍 DEBUG: User validation result: {user}")
+    else:
+        print("❌ DEBUG: No token in session data")
+
     navbar = create_navbar(user)
 
-    if pathname == '/login':
-        if user:
-            return navbar, dbc.Container([
-                dbc.Alert("You are already logged in", color="info"),
-                dcc.Link("Go to Dashboard", href="/")
-            ])
+    # Public pages
+    if pathname == '/about-usc':
+        return navbar, create_about_usc_layout()
+    elif pathname == '/vision-mission-motto':
+        return navbar, create_vision_mission_motto_layout()
+    elif pathname == '/governance':
+        return navbar, create_governance_layout()
+    elif pathname == '/login':
         return navbar, create_login_page()
-
     elif pathname == '/register':
-        if user:
-            return navbar, dbc.Container([
-                dbc.Alert("You are already logged in", color="info"),
-                dcc.Link("Go to Dashboard", href="/")
-            ])
         return navbar, create_register_page()
+    elif pathname == '/request':
+        return navbar, create_request_form()
 
-    elif pathname == '/user-settings':
+    # DASHBOARD ROUTE WITH DEBUG
+    elif pathname == '/dashboard':
+        print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
         if user:
-            return navbar, create_user_settings_page(user)
+            print("✅ DEBUG: User authenticated, showing dashboard")
+            return navbar, create_dashboard()
         else:
-            return navbar, dbc.Container([
-                dbc.Alert("Please login to access settings", color="warning"),
+            print("❌ DEBUG: User not authenticated, showing login prompt")
+            return navbar, dbc.Alert([
+                html.I(className="fas fa-lock me-2"),
+                "Please login to access the dashboard. ",
                 dcc.Link("Login here", href="/login")
-            ])
-
+            ], color="warning")
+    elif pathname == '/test-dashboard':
+        # Test route that doesn't require authentication
+        return navbar, dbc.Container([
+            dbc.Alert("Test Dashboard - No Authentication Required", color="info"),
+            html.P("If you can see this, routing is working correctly.")
+        ])
+    # Protected pages - require login
     elif pathname == '/admin':
         if user and user['role'] == 'admin':
-            return navbar, dbc.Container([
-                html.H2([html.I(className="fas fa-shield-alt me-2"), "Admin Dashboard"]),
-                html.Hr(),
-                dbc.Tabs([
-                    dbc.Tab(label="User Management", tab_id="users"),
-                    dbc.Tab(label="System Stats", tab_id="stats"),
-                ], id="admin-tabs", active_tab="users"),
-                html.Div(id="admin-content", className="mt-4")
-            ])
+            return navbar, create_admin_dashboard(user)
         else:
-            return navbar, dbc.Container([
-                dbc.Alert("Access denied. Admin privileges required.", color="danger"),
-                dcc.Link("Go Home", href="/")
-            ])
-
+            return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
     elif pathname == '/profile':
         if user:
-            return navbar, dbc.Container([
-                html.H2([html.I(className="fas fa-user me-2"), "My Profile"]),
-                html.Hr(),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardHeader("Profile Information"),
-                            dbc.CardBody([
-                                html.P([html.Strong("Username: "), user['username']]),
-                                html.P([html.Strong("Email: "), user['email']]),
-                                html.P([html.Strong("Full Name: "), user['full_name']]),
-                                html.P([html.Strong("Phone: "), user['phone_number'] or "Not provided"]),
-                                html.P([html.Strong("Department: "), user['department'] or "Not specified"]),
-                                html.P([html.Strong("Position: "), user['position'] or "Not specified"]),
-                                html.P([html.Strong("USC Employee: "), "Yes" if user['is_usc_employee'] else "No"]),
-                                html.P([html.Strong("Role: "),
-                                        dbc.Badge(user['role'].upper(),
-                                                  color="danger" if user['role'] == "admin" else "primary")]),
-                                html.Hr(),
-                                dbc.ButtonGroup([
-                                    dbc.Button("Edit Settings", href="/user-settings", color="primary"),
-                                    dbc.Button("Change Password", href="/user-settings", color="warning")
-                                ])
-                            ])
-                        ])
-                    ], md=8)
-                ])
-            ], className="py-4")
+            return navbar, create_profile_page(user)
         else:
-            return navbar, dbc.Container([
-                dbc.Alert("Please login to view your profile", color="warning"),
-                dcc.Link("Login here", href="/login")
-            ])
-
-    # Default home page
-    else:
-        welcome_content = [
-            dbc.Jumbotron([
-                html.H1("USC Institutional Research Portal", className="display-4"),
-                html.P("Access university data, reports, and analytics", className="lead"),
-                html.Hr(className="my-2"),
-                html.P("Welcome to the University of the Southern Caribbean's Institutional Research portal.")
-            ])
-        ]
-
+            return navbar, dbc.Alert("Please login to view your profile.", color="warning")
+    elif pathname == '/change-password':
         if user:
-            welcome_content.append(
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardBody([
-                                html.H5("Quick Access"),
-                                dbc.ButtonGroup([
-                                                    dbc.Button("My Profile", color="outline-primary", href="/profile"),
-                                                    dbc.Button("Settings", color="outline-secondary",
-                                                               href="/user-settings")
-                                                ] + ([dbc.Button("Admin Panel", color="danger", href="/admin")] if user[
-                                                                                                                       'role'] == 'admin' else []))
-                            ])
-                        ])
-                    ], md=6),
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardBody([
-                                html.H5(f"Welcome, {user['full_name']}!"),
-                                html.P(f"Role: {user['role'].title()}"),
-                                html.P(f"Department: {user['department'] or 'Not specified'}")
-                            ])
-                        ])
-                    ], md=6)
-                ], className="mt-4")
-            )
+            return navbar, create_change_password_page(user)
         else:
-            welcome_content.append(
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button("Login to Continue", color="primary", size="lg", href="/login", className="me-2"),
-                        dbc.Button("Register Account", color="outline-primary", size="lg", href="/register")
-                    ], className="text-center")
-                ], className="mt-4")
-            )
-
-        return navbar, dbc.Container(welcome_content, className="py-5")
-
-
-@app.callback(
-    Output('admin-content', 'children'),
-    [Input('admin-tabs', 'active_tab')],
-    [State('session-store', 'data')]
-)
-def update_admin_content(active_tab, session_data):
-    """Update admin dashboard content"""
-    if not session_data:
-        return dbc.Alert("Please login", color="warning")
-
-    user = validate_session(session_data.get('token'))
-    if not user or user['role'] != 'admin':
-        return dbc.Alert("Access denied", color="danger")
-
-    if active_tab == "users":
-        return create_admin_user_settings()
-    elif active_tab == "stats":
-        # System statistics
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT COUNT(*) FROM users')
-        total_users = cursor.fetchone()[0]
-
-        cursor.execute('SELECT COUNT(*) FROM users WHERE is_approved = 0')
-        pending_users = cursor.fetchone()[0]
-
-        cursor.execute('SELECT COUNT(*) FROM users WHERE is_active = 1')
-        active_users = cursor.fetchone()[0]
-
-        cursor.execute('SELECT COUNT(*) FROM sessions WHERE expires_at > ?', (datetime.now(),))
-        active_sessions = cursor.fetchone()[0]
-
-        conn.close()
-
-        return dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(str(total_users), className="text-primary"),
-                        html.P("Total Users")
-                    ])
-                ])
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(str(pending_users), className="text-warning"),
-                        html.P("Pending Approval")
-                    ])
-                ])
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(str(active_users), className="text-success"),
-                        html.P("Active Users")
-                    ])
-                ])
-            ], md=3),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(str(active_sessions), className="text-info"),
-                        html.P("Active Sessions")
-                    ])
-                ])
-            ], md=3)
+            return navbar, dbc.Alert("Please login to change password.", color="warning")
+    elif pathname == '/test-session':
+        # Test simple session storage
+        test_data = {'test': 'working', 'timestamp': str(datetime.now())}
+        return navbar, dbc.Container([
+            html.H3("Session Storage Test"),
+            html.P(f"Current session data: {session_data}"),
+            html.P("This tests if session storage is working at all."),
+            dbc.Button("Store Test Data", id="store-test-btn"),
+            html.Div(id="test-result")
         ])
 
-    return html.Div("Select a tab")
+    # Default to home
+    return navbar, create_home_page(user)
 
 @app.callback(
     [Output('session-store', 'data', allow_duplicate=True),
@@ -3554,38 +2786,6 @@ def handle_logout(n_clicks, session_data):
     return dash.no_update, dash.no_update
 
 
-# Keep your existing Google OAuth callback
-@app.callback(
-    Output('google-credential-store', 'data'),
-    [Input('google-credential-store', 'id')],  # Dummy input to trigger
-    prevent_initial_call=False
-)
-def poll_for_google_credential(_):
-    """This won't actually get the credential, but ensures the store exists"""
-    return None
-
-
-# Use clientside callback for better credential handling
-app.clientside_callback(
-    """
-    function() {
-        // Check if Google credential is available in window
-        if (typeof window !== 'undefined' && window.googleCredential) {
-            const cred = window.googleCredential;
-            window.googleCredential = null; // Clear it
-            console.log('📤 Sending credential to Python callback');
-            return cred;
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output('google-credential-store', 'data', allow_duplicate=True),
-    [Input('google-credential-store', 'data')],
-    prevent_initial_call=True
-)
-
-
-# Keep your existing Google OAuth Python callback exactly as is
 @app.callback(
     [Output('session-store', 'data', allow_duplicate=True),
      Output('login-alert', 'children', allow_duplicate=True),
@@ -3594,14 +2794,14 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 def handle_google_oauth_login(credential):
-    """Handle Google OAuth login - keep your existing function"""
+    """Handle Google OAuth login"""
     if not credential or len(str(credential)) < 100:
         return dash.no_update, dash.no_update, dash.no_update
 
     print(f"🔍 Processing Google credential of length {len(credential)}")
 
     try:
-        # Use your existing verify_google_token function
+        # Verify Google token
         result = verify_google_token(credential)
 
         if not result['success']:
@@ -3616,16 +2816,59 @@ def handle_google_oauth_login(credential):
 
         print(f"✅ Google token verified for: {email}")
 
-        # Your existing database logic here...
-        # (I'll keep this short, but use your existing code)
+        # Create or update user in database
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
 
-        return {
-            'token': 'your_generated_token',
-            'user': {'email': email, 'name': name}
-        }, dbc.Alert([
+        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+        existing_user = cursor.fetchone()
+
+        if existing_user:
+            user_id = existing_user[0]
+            cursor.execute('''
+                UPDATE users 
+                SET last_login = ?, full_name = ?, google_auth = 1
+                WHERE id = ?
+            ''', (datetime.now(), name, user_id))
+            print(f"✅ Updated existing user: {email}")
+        else:
+            # Determine role based on USC domain
+            role = 'employee' if email.endswith('@usc.edu.tt') else 'user'
+            is_approved = 1 if email.endswith('@usc.edu.tt') else 0
+
+            cursor.execute('''
+                INSERT INTO users 
+                (email, username, full_name, role, is_active, is_approved, google_auth, created_at, last_login)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (email, email.split('@')[0], name, role, 1, is_approved, 1, datetime.now(), datetime.now()))
+            user_id = cursor.lastrowid
+            print(f"✅ Created new user: {email} (ID: {user_id})")
+
+        conn.commit()
+        conn.close()
+
+        # Generate session token
+        token = generate_token(user_id)
+
+        if not token:
+            return dash.no_update, dbc.Alert("Session creation failed", color="danger"), dash.no_update
+
+        # Create session data
+        session_data = {
+            'token': token,
+            'user': {
+                'id': user_id,
+                'email': email,
+                'username': email.split('@')[0],
+                'full_name': name,
+                'role': role
+            }
+        }
+
+        return session_data, dbc.Alert([
             html.I(className="fas fa-check-circle me-2"),
             f"Welcome {name}! Google sign-in successful."
-        ], color="success"), "/"
+        ], color="success"), "/"  # Redirect to HOME instead of dashboard
 
     except Exception as e:
         print(f"❌ Google OAuth error: {e}")
@@ -3633,6 +2876,7 @@ def handle_google_oauth_login(credential):
             html.I(className="fas fa-bug me-2"),
             f"Login error: {str(e)}"
         ], color="danger"), dash.no_update
+
 
 # Add callback for access requests table
 @app.callback(
