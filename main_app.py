@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from pages.public.about_usc import create_about_usc_layout
 from pages.public.vision_mission_motto import create_vision_mission_motto_layout
 from pages.public.governance import create_governance_layout
-
+from data_loader import data_loader
 # Add to your imports
 from google_auth import init_google_auth_tables, verify_google_token, create_or_update_google_user, has_financial_access
 def adapt_datetime(dt):
@@ -707,7 +707,7 @@ def change_user_password(user_id, current_password, new_password):
 # ==================== UI COMPONENTS (Original Style) ====================
 
 def create_navbar(user=None):
-    """Create the main navigation bar with original styling"""
+    """Create the main navigation bar - simplified with factbook access for admins"""
     nav_items = [
         dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
         dbc.DropdownMenu([
@@ -721,36 +721,20 @@ def create_navbar(user=None):
     ]
 
     if user:
-        nav_items.extend([
-            dbc.DropdownMenu(
-                children=[
-                    dbc.DropdownMenuItem("Student Enrollment", href="#enrollment"),
-                    dbc.DropdownMenuItem("Graduation Data", href="#graduation"),
-                    dbc.DropdownMenuItem("Academic Programs", href="#programs"),
-                    dbc.DropdownMenuItem("Faculty Statistics", href="#faculty"),
-                ],
-                nav=True,
-                in_navbar=True,
-                label="Academic Data",
-            ),
-            dbc.DropdownMenu(
-                children=[
-                    dbc.DropdownMenuItem("Financial Overview", href="#financial"),
-                    dbc.DropdownMenuItem("Subsidies & Funding", href="#funding"),
-                    dbc.DropdownMenuItem("Income Sources", href="#income"),
-                    dbc.DropdownMenuItem("Scholarships", href="#scholarships"),
-                ],
-                nav=True,
-                in_navbar=True,
-                label="Financial Data",
-            ),
-            dbc.NavItem(dbc.NavLink("Factbook", href="#factbook")),
-        ])
+        # Add Dashboard for all authenticated users
+        nav_items.append(
+            dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard"))
+        )
 
-        if user['role'] == 'admin':
-            nav_items.append(
+        # Add Factbook access for admins only
+        if user.get('role') == 'admin':
+            nav_items.extend([
+                dbc.NavItem(dbc.NavLink([
+                    html.I(className="fas fa-book me-2"),
+                    "Factbook"
+                ], href="/factbook", style={"color": USC_COLORS["accent_yellow"]})),
                 dbc.NavItem(dbc.NavLink("Admin", href="/admin", className="text-warning"))
-            )
+            ])
 
         # User menu with profile options
         nav_items.append(
@@ -769,6 +753,7 @@ def create_navbar(user=None):
             )
         )
     else:
+        # For non-authenticated users
         nav_items.extend([
             dbc.NavItem(dbc.NavLink("Request Access", href="/request")),
             dbc.NavItem(dbc.NavLink("Contact", href="#contact")),
@@ -798,8 +783,6 @@ def create_navbar(user=None):
         fluid=True,
         className="mb-0"
     )
-
-
 def create_hero_section():
     """Create enhanced hero section with USC ecosystem links"""
     return html.Div([
@@ -2292,82 +2275,243 @@ app.layout = html.Div([
     [State('session-store', 'data')]
 )
 def display_page(pathname, session_data):
-    """Main router callback with debug logging"""
-    print(f"🔍 DEBUG: Accessing pathname: {pathname}")
-    print(f"🔍 DEBUG: Session data: {session_data}")
+    """Main router callback with debug logging and error handling"""
+    try:
+        print(f"🔍 DEBUG: Accessing pathname: {pathname}")
+        print(f"🔍 DEBUG: Session data: {session_data}")
 
-    user = None
-    if session_data and 'token' in session_data:
-        print("🔍 DEBUG: Token found in session, validating...")
-        user = validate_session(session_data['token'])
-        print(f"🔍 DEBUG: User validation result: {user}")
-    else:
-        print("❌ DEBUG: No token in session data")
-
-    navbar = create_navbar(user)
-
-    # Public pages
-    if pathname == '/about-usc':
-        return navbar, create_about_usc_layout()
-    elif pathname == '/vision-mission-motto':
-        return navbar, create_vision_mission_motto_layout()
-    elif pathname == '/governance':
-        return navbar, create_governance_layout()
-    elif pathname == '/login':
-        return navbar, create_login_page()
-    elif pathname == '/register':
-        return navbar, create_register_page()
-    elif pathname == '/request':
-        return navbar, create_request_form()
-
-    # DASHBOARD ROUTE WITH DEBUG
-    elif pathname == '/dashboard':
-        print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
-        if user:
-            print("✅ DEBUG: User authenticated, showing dashboard")
-            return navbar, create_dashboard()
+        user = None
+        if session_data and 'token' in session_data:
+            print("🔍 DEBUG: Token found in session, validating...")
+            user = validate_session(session_data['token'])
+            print(f"🔍 DEBUG: User validation result: {user}")
         else:
-            print("❌ DEBUG: User not authenticated, showing login prompt")
-            return navbar, dbc.Alert([
-                html.I(className="fas fa-lock me-2"),
-                "Please login to access the dashboard. ",
-                dcc.Link("Login here", href="/login")
-            ], color="warning")
-    elif pathname == '/test-dashboard':
-        # Test route that doesn't require authentication
-        return navbar, dbc.Container([
-            dbc.Alert("Test Dashboard - No Authentication Required", color="info"),
-            html.P("If you can see this, routing is working correctly.")
-        ])
-    # Protected pages - require login
-    elif pathname == '/admin':
-        if user and user['role'] == 'admin':
-            return navbar, create_admin_dashboard(user)
-        else:
-            return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
-    elif pathname == '/profile':
-        if user:
-            return navbar, create_profile_page(user)
-        else:
-            return navbar, dbc.Alert("Please login to view your profile.", color="warning")
-    elif pathname == '/change-password':
-        if user:
-            return navbar, create_change_password_page(user)
-        else:
-            return navbar, dbc.Alert("Please login to change password.", color="warning")
-    elif pathname == '/test-session':
-        # Test simple session storage
-        test_data = {'test': 'working', 'timestamp': str(datetime.now())}
-        return navbar, dbc.Container([
-            html.H3("Session Storage Test"),
-            html.P(f"Current session data: {session_data}"),
-            html.P("This tests if session storage is working at all."),
-            dbc.Button("Store Test Data", id="store-test-btn"),
-            html.Div(id="test-result")
-        ])
+            print("❌ DEBUG: No token in session data")
 
-    # Default to home
-    return navbar, create_home_page(user)
+        navbar = create_navbar(user)
+
+        # Public pages
+        if pathname == '/about-usc':
+            return navbar, create_about_usc_layout()
+        elif pathname == '/vision-mission-motto':
+            return navbar, create_vision_mission_motto_layout()
+        elif pathname == '/governance':
+            return navbar, create_governance_layout()
+        elif pathname == '/login':
+            return navbar, create_login_page()
+        elif pathname == '/register':
+            return navbar, create_register_page()
+        elif pathname == '/request':
+            return navbar, create_request_form()
+
+        # DASHBOARD ROUTE WITH DEBUG
+        elif pathname == '/dashboard':
+            print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
+            if user:
+                print("✅ DEBUG: User authenticated, showing dashboard")
+                return navbar, create_dashboard()
+            else:
+                print("❌ DEBUG: User not authenticated, showing login prompt")
+                return navbar, dbc.Alert([
+                    html.I(className="fas fa-lock me-2"),
+                    "Please login to access the dashboard. ",
+                    dcc.Link("Login here", href="/login")
+                ], color="warning")
+
+        # NEW: FACTBOOK ROUTES WITH ERROR HANDLING
+        elif pathname == '/factbook':
+            print(f"🔍 DEBUG: Factbook accessed, user: {user}")
+            if user and user.get('role') == 'admin':
+                print("✅ DEBUG: Admin user authenticated, showing factbook")
+                try:
+                    from pages import factbook
+                    return navbar, factbook.layout
+                except ImportError as e:
+                    print(f"❌ DEBUG: Factbook import error: {e}")
+                    return navbar, dbc.Alert([
+                        html.I(className="fas fa-exclamation-triangle me-2"),
+                        "Factbook module not found. Please ensure factbook.py is in the pages directory."
+                    ], color="danger")
+                except Exception as e:
+                    print(f"❌ DEBUG: Factbook error: {e}")
+                    traceback.print_exc()
+                    return navbar, dbc.Alert([
+                        html.I(className="fas fa-exclamation-triangle me-2"),
+                        f"Error loading factbook: {str(e)}"
+                    ], color="danger")
+            else:
+                print("❌ DEBUG: User not admin or not authenticated")
+                return navbar, dbc.Alert([
+                    html.I(className="fas fa-lock me-2"),
+                    "Admin access required to view the Factbook."
+                ], color="danger")
+
+
+        elif pathname == '/student-labour':
+
+            print(f"🔍 DEBUG: Student Labour accessed, user: {user}")
+
+            if user and user.get('role') == 'admin':
+
+                print("✅ DEBUG: Admin user authenticated, showing ultra-safe student labour report")
+
+                try:
+
+                    print("📦 Importing ultra-safe student labour module...")
+
+                    from pages import ultra_safe_student_labour
+
+                    print("✅ Ultra-safe module imported successfully")
+
+                    print("📊 Returning ultra-safe layout...")
+
+                    return navbar, ultra_safe_student_labour.layout
+
+                except ImportError as e:
+
+                    print(f"❌ DEBUG: Import error: {e}")
+
+                    return navbar, dbc.Container([
+
+                        dbc.Alert([
+
+                            html.H4("Import Error", className="alert-heading"),
+
+                            html.P(f"Could not import ultra_safe_student_labour module: {str(e)}"),
+
+                            html.P("Please ensure the file pages/ultra_safe_student_labour.py exists.")
+
+                        ], color="danger")
+
+                    ])
+
+                except Exception as e:
+
+                    print(f"❌ DEBUG: Unexpected error: {e}")
+
+                    import traceback
+
+                    traceback.print_exc()
+
+                    return navbar, dbc.Container([
+
+                        dbc.Alert([
+
+                            html.H4("Unexpected Error", className="alert-heading"),
+
+                            html.P(f"Error loading student labour report: {str(e)}"),
+
+                            html.P("Check the console for detailed error information.")
+
+                        ], color="danger")
+
+                    ])
+
+            else:
+
+                print("❌ DEBUG: User not admin or not authenticated")
+
+                return navbar, dbc.Alert([
+
+                    html.I(className="fas fa-lock me-2"),
+
+                    "Admin access required to view this report."
+
+                ], color="danger")
+
+
+        # ALSO add this test route to verify the fix:
+
+        elif pathname == '/test-ultra-safe':
+
+            print("🧪 Testing ultra-safe import...")
+
+            try:
+
+                from pages import ultra_safe_student_labour
+
+                return navbar, dbc.Container([
+
+                    dbc.Alert("✅ Ultra-safe module imported successfully!", color="success"),
+
+                    html.P("The module is working. Now try /student-labour")
+
+                ])
+
+            except Exception as e:
+
+                return navbar, dbc.Container([
+
+                    dbc.Alert(f"❌ Import test failed: {e}", color="danger"),
+
+                    html.P("This helps identify the exact import issue.")
+
+                ])
+
+        elif pathname == '/test-dashboard':
+            # Test route that doesn't require authentication
+            return navbar, dbc.Container([
+                dbc.Alert("Test Dashboard - No Authentication Required", color="info"),
+                html.P("If you can see this, routing is working correctly.")
+            ])
+
+        # Protected pages - require login
+        elif pathname == '/admin':
+            if user and user['role'] == 'admin':
+                return navbar, create_admin_dashboard(user)
+            else:
+                return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
+        elif pathname == '/profile':
+            if user:
+                return navbar, create_profile_page(user)
+            else:
+                return navbar, dbc.Alert("Please login to view your profile.", color="warning")
+        elif pathname == '/change-password':
+            if user:
+                return navbar, create_change_password_page(user)
+            else:
+                return navbar, dbc.Alert("Please login to change password.", color="warning")
+        elif pathname == '/test-session':
+            # Test simple session storage
+            test_data = {'test': 'working', 'timestamp': str(datetime.now())}
+            return navbar, dbc.Container([
+                html.H3("Session Storage Test"),
+                html.P(f"Current session data: {session_data}"),
+                html.P("This tests if session storage is working at all."),
+                dbc.Button("Store Test Data", id="store-test-btn"),
+                html.Div(id="test-result")
+            ])
+
+        # Default to home
+        print("🔍 DEBUG: Defaulting to home page")
+        return navbar, create_home_page(user)
+
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in display_page callback: {e}")
+        traceback.print_exc()
+
+        # Return a safe fallback
+        try:
+            safe_navbar = create_navbar(None)  # Create navbar with no user
+            return safe_navbar, dbc.Container([
+                dbc.Alert([
+                    html.H4("Application Error", className="alert-heading"),
+                    html.P(f"An error occurred while loading the page: {str(e)}"),
+                    html.Hr(),
+                    html.P("Please try refreshing the page or contact support.", className="mb-0")
+                ], color="danger")
+            ])
+        except Exception as navbar_error:
+            print(f"❌ CRITICAL: Even navbar creation failed: {navbar_error}")
+            # Last resort fallback
+            return html.Div("Critical Error: Please refresh page"), dbc.Alert("Critical application error",
+                                                                              color="danger")
+
+# 3. ALSO ADD a simple test route to verify your factbook files work:
+
+# Add this route for testing (you can remove it later):
+
+
 
 @app.callback(
     [Output('session-store', 'data', allow_duplicate=True),
@@ -2939,6 +3083,10 @@ def get_access_requests_content():
 def has_financial_access(user):
     """Check if user has access to financial data"""
     return user.get('role') == 'admin'
+
+
+
+
 
 def is_usc_employee(email):
     """Check if email belongs to USC domain"""
