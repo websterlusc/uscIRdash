@@ -21,13 +21,15 @@ from pages.public.vision_mission_motto import create_vision_mission_motto_layout
 from pages.public.governance import create_governance_layout
 from data_loader import data_loader
 # Add to your imports
+# Import the callbacks
+from callbacks.student_labour_callbacks import register_student_labour_callbacks
 from google_auth import init_google_auth_tables, verify_google_token, create_or_update_google_user, has_financial_access
 def adapt_datetime(dt):
     return dt.isoformat()
 
 def convert_datetime(val):
     return datetime.fromisoformat(val.decode())
-
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 # Register adapters to fix deprecation warnings
 sqlite3.register_adapter(datetime, adapt_datetime)
 sqlite3.register_converter("TIMESTAMP", convert_datetime)
@@ -2264,7 +2266,7 @@ app.layout = html.Div([
     html.Div(id='page-content'),
     html.Div(id='hidden-div', style={'display': 'none'})
 ])
-
+register_student_labour_callbacks()
 
 # ==================== CALLBACKS ====================
 
@@ -2360,6 +2362,7 @@ def display_page(pathname, session_data):
                     print("📦 Importing ultra-safe student labour module...")
 
                     from pages import ultra_safe_student_labour
+
 
                     print("✅ Ultra-safe module imported successfully")
 
