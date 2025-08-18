@@ -1,327 +1,400 @@
 """
-Ultra Safe Student Labour Report Page
-
-This version handles the exact column naming issue and won't crash the server.
+Student Labour Report Page for USC Factbook - Simple & Clean Version
 """
 
-from dash import html, dcc
+from dash import html, dcc, callback, Input, Output
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 from config import USC_COLORS
 
-def safe_load_data():
-    """Load data with maximum safety"""
+
+def load_student_labour_data():
+    """Load student labour data from Excel file"""
     try:
         from data_loader import data_loader
-        print("🔄 Starting safe data load...")
+        print("🔄 Loading student labour data...")
 
         raw_data = data_loader.load_student_labour_data()
-        print(f"✅ Raw data loaded: {list(raw_data.keys()) if raw_data else 'None'}")
+        print(f"📊 Raw data keys: {list(raw_data.keys()) if raw_data else 'None'}")
 
-        # Process each dataset safely
-        processed = {}
+        if not raw_data:
+            print("❌ No raw data returned")
+            return None, None
 
-        # Handle Assignment data with 'Unnamed' columns
-        if 'assignment' in raw_data:
-            df = raw_data['assignment'].copy()
-            print(f"📊 Assignment columns: {list(df.columns)}")
-
-            # Rename unnamed columns to something useful
-            if len(df.columns) >= 3:
-                df.columns = ['School_Site', 'Year_2022_2023', 'Year_2023_2024']
-                processed['assignment'] = df
-                print("✅ Assignment data processed")
-            else:
-                print("❌ Assignment data has insufficient columns")
-
-        # Handle Employment data
+        # Employment data
+        employment_df = None
         if 'employment' in raw_data:
-            df = raw_data['employment'].copy()
-            print(f"📊 Employment columns: {list(df.columns)}")
-            processed['employment'] = df
-            print("✅ Employment data processed")
+            employment_df = raw_data['employment'].copy()
+            print(f"📊 Employment data shape: {employment_df.shape}")
+            print(f"📊 Employment columns: {list(employment_df.columns)}")
+            print(
+                f"📊 Employment years: {employment_df['Academic Year'].unique() if 'Academic Year' in employment_df.columns else 'No Academic Year column'}")
+            employment_df['Academic Year'] = employment_df['Academic Year'].astype(str)
+        else:
+            print("❌ No employment data found")
 
-        # Handle Expense data
+        # Expense data
+        expense_df = None
         if 'expense' in raw_data:
-            df = raw_data['expense'].copy()
-            print(f"📊 Expense columns: {list(df.columns)}")
-            processed['expense'] = df
-            print("✅ Expense data processed")
+            expense_df = raw_data['expense'].copy()
+            print(f"📊 Expense data shape: {expense_df.shape}")
+            print(f"📊 Expense columns: {list(expense_df.columns)}")
+            print(
+                f"📊 Expense years: {expense_df['Year'].unique() if 'Year' in expense_df.columns else 'No Year column'}")
+            expense_df['Year'] = expense_df['Year'].astype(str).str.strip()
+            # Clean expense data
+            expense_df['Expense'] = expense_df['Expense'].astype(str).str.replace(',', '').str.replace(' ', '')
+            expense_df['Expense'] = pd.to_numeric(expense_df['Expense'], errors='coerce')
+        else:
+            print("❌ No expense data found")
 
-        # Handle Monthly data
-        if 'monthly_expense' in raw_data:
-            df = raw_data['monthly_expense'].copy()
-            print(f"📊 Monthly columns: {list(df.columns)}")
-            processed['monthly_expense'] = df
-            print("✅ Monthly data processed")
-
-        print(f"🎉 All data processed successfully: {list(processed.keys())}")
-        return processed
-
-    except Exception as e:
-        print(f"❌ Error in safe_load_data: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def create_safe_assignment_chart():
-    """Create assignment chart with maximum error handling"""
-    try:
-        print("🔄 Creating assignment chart...")
-        data = safe_load_data()
-
-        if not data or 'assignment' not in data:
-            print("❌ No assignment data available")
-            return px.bar(x=['No Data'], y=[0], title="Assignment Data Not Available")
-
-        df = data['assignment']
-        print(f"📊 Assignment chart data shape: {df.shape}")
-        print(f"📊 Assignment chart columns: {list(df.columns)}")
-
-        if df.empty or len(df.columns) < 3:
-            return px.bar(x=['No Data'], y=[0], title="Insufficient Assignment Data")
-
-        # Use the renamed columns
-        school_col = df.columns[0]  # Should be 'School_Site'
-        year1_col = df.columns[1]   # Should be 'Year_2022_2023'
-        year2_col = df.columns[2]   # Should be 'Year_2023_2024'
-
-        # Create simple bar chart for just the latest year
-        fig = px.bar(
-            df.head(10),  # Limit to first 10 rows to avoid overcrowding
-            x=school_col,
-            y=year2_col,
-            title="Student Assignments by School/Site (2023-2024)",
-            color_discrete_sequence=[USC_COLORS['primary_green']]
-        )
-
-        fig.update_layout(
-            height=400,
-            plot_bgcolor='white',
-            xaxis_tickangle=-45,
-            font_family="Arial"
-        )
-
-        print("✅ Assignment chart created successfully")
-        return fig
+        print("✅ Student labour data loaded successfully")
+        return employment_df, expense_df
 
     except Exception as e:
-        print(f"❌ Error creating assignment chart: {e}")
+        print(f"❌ Error loading student labour data: {e}")
         import traceback
         traceback.print_exc()
-        return px.bar(x=['Error'], y=[1], title=f"Chart Error: {str(e)}")
+        return None, None
 
-def create_safe_employment_chart():
-    """Create employment chart safely"""
-    try:
-        print("🔄 Creating employment chart...")
-        data = safe_load_data()
 
-        if not data or 'employment' not in data:
-            return px.bar(x=['No Data'], y=[0], title="Employment Data Not Available")
+def create_employment_chart(employment_df, view_mode="Values", selected_years=None):
+    """Create employment chart"""
+    print(f"🎨 Creating employment chart: df={employment_df is not None}, view={view_mode}, years={selected_years}")
 
-        df = data['employment']
-        print(f"📊 Employment data shape: {df.shape}")
-
-        if df.empty or len(df.columns) < 3:
-            return px.bar(x=['No Data'], y=[0], title="Insufficient Employment Data")
-
-        # Create simple grouped bar chart
+    if employment_df is None or employment_df.empty:
+        print("❌ No employment data for chart")
         fig = go.Figure()
-
-        year_col = df.columns[0]
-        academic_col = df.columns[1]
-        non_academic_col = df.columns[2]
-
-        fig.add_trace(go.Bar(
-            name='Academic Employment',
-            x=df[year_col],
-            y=df[academic_col],
-            marker_color=USC_COLORS['primary_green']
-        ))
-
-        fig.add_trace(go.Bar(
-            name='Non-Academic Employment',
-            x=df[year_col],
-            y=df[non_academic_col],
-            marker_color=USC_COLORS['accent_yellow']
-        ))
-
-        fig.update_layout(
-            title='Student Employment by Type',
-            barmode='group',
-            height=400,
-            plot_bgcolor='white',
-            font_family="Arial"
+        fig.add_annotation(
+            text="No employment data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
         )
-
-        print("✅ Employment chart created successfully")
+        fig.update_layout(height=400, title="Employment Chart")
         return fig
 
-    except Exception as e:
-        print(f"❌ Error creating employment chart: {e}")
-        return px.bar(x=['Error'], y=[1], title=f"Employment Chart Error: {str(e)}")
+    # Prepare data
+    df = employment_df.copy()
+    print(f"📊 Original data shape: {df.shape}")
 
-def create_safe_summary_cards():
-    """Create summary cards safely"""
-    try:
-        print("🔄 Creating summary cards...")
-        data = safe_load_data()
+    if selected_years:
+        df = df[df['Academic Year'].isin(selected_years)]
+        print(f"📊 Filtered data shape: {df.shape}")
 
-        if not data or 'employment' not in data:
-            return [
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4("N/A", className="text-muted"),
-                        html.P("Data Loading", className="mb-0")
-                    ])
-                ], className="text-center")
-            ] * 4
+    if df.empty:
+        print("❌ No data after filtering")
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data for selected years",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(height=400, title="Employment Chart")
+        return fig
 
-        emp_df = data['employment']
+    # Create chart based on view mode
+    if view_mode == "Percentage":
+        # Calculate percentages
+        df['Total'] = df['Academic Employment'] + df['Non-Academic Employment']
+        df['Academic %'] = (df['Academic Employment'] / df['Total'] * 100).round(1)
+        df['Non-Academic %'] = (df['Non-Academic Employment'] / df['Total'] * 100).round(1)
 
-        if not emp_df.empty and len(emp_df.columns) >= 3:
-            latest = emp_df.iloc[-1]
-            academic = latest.iloc[1]
-            non_academic = latest.iloc[2]
-            total = academic + non_academic
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name='Academic',
+            x=df['Academic Year'],
+            y=df['Academic %'],
+            marker_color=USC_COLORS["primary_green"]
+        ))
+        fig.add_trace(go.Bar(
+            name='Non-Academic',
+            x=df['Academic Year'],
+            y=df['Non-Academic %'],
+            marker_color=USC_COLORS["accent_yellow"]
+        ))
+        fig.update_layout(
+            title="Student Employment Distribution (%)",
+            yaxis_title="Percentage (%)",
+            barmode='group'
+        )
+    else:
+        # Numbers view
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name='Academic',
+            x=df['Academic Year'],
+            y=df['Academic Employment'],
+            marker_color=USC_COLORS["primary_green"]
+        ))
+        fig.add_trace(go.Bar(
+            name='Non-Academic',
+            x=df['Academic Year'],
+            y=df['Non-Academic Employment'],
+            marker_color=USC_COLORS["accent_yellow"]
+        ))
+        fig.update_layout(
+            title="Student Employment Numbers",
+            yaxis_title="Number of Students",
+            barmode='group'
+        )
 
-            cards = [
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(f"{total}", className="text-primary"),
-                        html.P("Total Employment", className="mb-0")
-                    ])
-                ], className="text-center"),
+    fig.update_layout(
+        xaxis_title="Academic Year",
+        plot_bgcolor='white',
+        height=400
+    )
 
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(f"{academic}", className="text-success"),
-                        html.P("Academic Jobs", className="mb-0")
-                    ])
-                ], className="text-center"),
+    print("✅ Employment chart created successfully")
+    return fig
 
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(f"{non_academic}", className="text-warning"),
-                        html.P("Non-Academic Jobs", className="mb-0")
-                    ])
-                ], className="text-center"),
 
-                dbc.Card([
-                    dbc.CardBody([
-                        html.H4(f"{academic/total*100:.1f}%", className="text-info"),
-                        html.P("Academic %", className="mb-0")
-                    ])
-                ], className="text-center")
-            ]
+def create_expense_chart(expense_df, chart_type="Bar", view_mode="Values", selected_years=None):
+    """Create expense chart"""
+    print(f"🎨 Creating expense chart: df={expense_df is not None}, type={chart_type}, years={selected_years}")
 
-            print("✅ Summary cards created successfully")
-            return cards
+    if expense_df is None or expense_df.empty:
+        print("❌ No expense data for chart")
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No expense data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
+        )
+        fig.update_layout(height=400, title="Expense Chart")
+        return fig
 
-    except Exception as e:
-        print(f"❌ Error creating summary cards: {e}")
+    # Prepare data
+    df = expense_df.copy()
+    print(f"📊 Original expense data shape: {df.shape}")
 
-    # Fallback cards
-    return [
-        dbc.Card([
-            dbc.CardBody([
-                html.H4("Error", className="text-danger"),
-                html.P("Loading Failed", className="mb-0")
-            ])
-        ], className="text-center")
-    ] * 4
+    if selected_years:
+        df = df[df['Year'].isin(selected_years)]
+        print(f"📊 Filtered expense data shape: {df.shape}")
 
-def get_safe_layout():
-    """Create ultra-safe layout"""
-    print("🚀 Starting ultra-safe layout creation...")
+    if df.empty:
+        print("❌ No expense data after filtering")
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data for selected years",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
+        fig.update_layout(height=400, title="Expense Chart")
+        return fig
 
-    # Pre-create all components to avoid on-demand creation
-    print("📊 Creating summary cards...")
-    summary_cards = create_safe_summary_cards()
+    # Create chart based on type and view mode
+    if chart_type == "Pie":
+        fig = px.pie(
+            df,
+            values='Expense',
+            names='Year',
+            title='Expense Distribution',
+            color_discrete_sequence=[USC_COLORS["primary_green"], USC_COLORS["accent_yellow"],
+                                     USC_COLORS["secondary_green"]]
+        )
+    elif chart_type == "Line":
+        fig = px.line(
+            df,
+            x='Year',
+            y='Expense',
+            title='Expense Trend',
+            markers=True
+        )
+        fig.update_traces(line=dict(color=USC_COLORS["primary_green"], width=3), marker=dict(size=8))
+    else:  # Bar chart
+        fig = px.bar(
+            df,
+            x='Year',
+            y='Expense',
+            title='Annual Expenses',
+            color='Year',
+            color_discrete_sequence=[USC_COLORS["primary_green"], USC_COLORS["accent_yellow"],
+                                     USC_COLORS["secondary_green"]]
+        )
 
-    print("📊 Creating assignment chart...")
-    assignment_chart = create_safe_assignment_chart()
+    if chart_type != "Pie":
+        fig.update_layout(
+            xaxis_title="Year",
+            yaxis_title="Expense ($)",
+            plot_bgcolor='white',
+            height=400,
+            showlegend=False
+        )
+    else:
+        fig.update_layout(height=400)
 
-    print("📊 Creating employment chart...")
-    employment_chart = create_safe_employment_chart()
+    print("✅ Expense chart created successfully")
+    return fig
 
-    print("📊 All components created, building layout...")
 
-    layout = dbc.Container([
-        # Header
-        dbc.Row([
-            dbc.Col([
-                html.H1([
-                    html.I(className="fas fa-users-cog me-3"),
-                    "Student Labour Report"
-                ], className="mb-4", style={"color": USC_COLORS["primary_green"]}),
+# Load data once
+employment_df, expense_df = load_student_labour_data()
 
-                dbc.Alert([
-                    html.I(className="fas fa-info-circle me-2"),
-                    "Data successfully loaded from Excel files. Showing simplified charts for stability."
-                ], color="success", className="mb-4")
-            ])
-        ]),
-
-        # Summary Cards
-        dbc.Row([
-            dbc.Col(card, md=3, className="mb-4") for card in summary_cards
-        ]),
-
-        # Charts
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader(html.H5("Student Assignments by School", className="mb-0")),
-                    dbc.CardBody([
-                        dcc.Graph(
-                            figure=assignment_chart,
-                            config={'displayModeBar': False}
-                        )
-                    ])
-                ])
-            ], md=12, className="mb-4")
-        ]),
-
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader(html.H5("Employment Statistics", className="mb-0")),
-                    dbc.CardBody([
-                        dcc.Graph(
-                            figure=employment_chart,
-                            config={'displayModeBar': False}
-                        )
-                    ])
-                ])
-            ], md=12, className="mb-4")
-        ]),
-
-        # Data Preview
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader(html.H5("Data Status", className="mb-0")),
-                    dbc.CardBody([
-                        html.P("✅ Assignment sheet: Columns renamed from 'Unnamed' format"),
-                        html.P("✅ Employment sheet: Academic Year, Academic Employment, Non-Academic Employment"),
-                        html.P("✅ Expense sheet: Year, Expense"),
-                        html.P("✅ Monthly sheet: Month, 2021-2022, 2022-2023, 2023-2024"),
-                        html.Hr(),
-                        html.P("📧 For detailed data analysis, contact: ir@usc.edu.tt", className="text-muted")
-                    ])
-                ])
-            ])
+# Create layout
+layout = dbc.Container([
+    # Header
+    dbc.Row([
+        dbc.Col([
+            html.H1([
+                html.I(className="fas fa-users-cog me-3"),
+                "Student Labour Report"
+            ], className="mb-4", style={"color": USC_COLORS["primary_green"]}),
         ])
-    ], fluid=True, className="py-4")
+    ]),
 
-    print("✅ Layout created successfully!")
-    return layout
+    # Employment Section
+    html.H3("👥 Employment Analysis", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
 
-# Create the layout immediately
-print("🎯 Creating ultra-safe student labour layout...")
-layout = get_safe_layout()
-print("🎉 Ultra-safe layout ready!")
+    # Employment Filters
+    dbc.Accordion([
+        dbc.AccordionItem([
+            dbc.Row([
+                dbc.Col([
+                    html.Label("View Mode:", className="fw-bold mb-2"),
+                    dcc.RadioItems(
+                        id='employment-view-radio',
+                        options=[
+                            {'label': ' Values', 'value': 'Values'},
+                            {'label': ' Percentage', 'value': 'Percentage'}
+                        ],
+                        value='Values',
+                        inline=True,
+                        className="mb-3"
+                    )
+                ], md=6),
+                dbc.Col([
+                    html.Label("Academic Years:", className="fw-bold mb-2"),
+                    dcc.Dropdown(
+                        id='employment-years-dropdown',
+                        options=[],
+                        value=[],
+                        multi=True,
+                        className="mb-3"
+                    )
+                ], md=6)
+            ])
+        ], title="📊 Employment Filters")
+    ], className="mb-3", start_collapsed=True),
+
+    # Employment Chart
+    dbc.Card([
+        dbc.CardBody([
+            dcc.Graph(id='employment-chart')
+        ])
+    ], className="mb-4"),
+
+    html.Hr(),
+
+    # Expense Section
+    html.H3("💰 Expense Analysis", className="mb-3", style={"color": USC_COLORS["primary_green"]}),
+
+    # Expense Filters
+    dbc.Accordion([
+        dbc.AccordionItem([
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Chart Type:", className="fw-bold mb-2"),
+                    dcc.RadioItems(
+                        id='expense-chart-radio',
+                        options=[
+                            {'label': ' Bar', 'value': 'Bar'},
+                            {'label': ' Line', 'value': 'Line'},
+                            {'label': ' Pie', 'value': 'Pie'}
+                        ],
+                        value='Bar',
+                        inline=True,
+                        className="mb-3"
+                    )
+                ], md=6),
+                dbc.Col([
+                    html.Label("Years:", className="fw-bold mb-2"),
+                    dcc.Dropdown(
+                        id='expense-years-dropdown',
+                        options=[],
+                        value=[],
+                        multi=True,
+                        className="mb-3"
+                    )
+                ], md=6)
+            ])
+        ], title="💰 Expense Filters")
+    ], className="mb-3", start_collapsed=True),
+
+    # Expense Chart
+    dbc.Card([
+        dbc.CardBody([
+            dcc.Graph(id='expense-chart')
+        ])
+    ], className="mb-4")
+
+], fluid=True, className="py-4")
+
+
+# Callbacks
+@callback(
+    [Output('employment-years-dropdown', 'options'),
+     Output('employment-years-dropdown', 'value')],
+    Input('employment-chart', 'id')
+)
+def populate_employment_years(_):
+    """Populate employment years dropdown"""
+    print("🔄 Populating employment years dropdown...")
+    if employment_df is not None and not employment_df.empty:
+        years = sorted(employment_df['Academic Year'].unique(), reverse=True)
+        print(f"📅 Found employment years: {years}")
+        options = [{'label': year, 'value': year} for year in years]
+        default_years = years[:3] if len(years) >= 3 else years
+        print(f"📅 Default employment years: {default_years}")
+        return options, default_years
+    else:
+        print("❌ No employment data for years dropdown")
+        return [], []
+
+
+@callback(
+    [Output('expense-years-dropdown', 'options'),
+     Output('expense-years-dropdown', 'value')],
+    Input('expense-chart', 'id')
+)
+def populate_expense_years(_):
+    """Populate expense years dropdown"""
+    print("🔄 Populating expense years dropdown...")
+    if expense_df is not None and not expense_df.empty:
+        years = sorted(expense_df['Year'].unique(), reverse=True)
+        print(f"📅 Found expense years: {years}")
+        options = [{'label': year, 'value': year} for year in years]
+        default_years = years[:3] if len(years) >= 3 else years
+        print(f"📅 Default expense years: {default_years}")
+        return options, default_years
+    else:
+        print("❌ No expense data for years dropdown")
+        return [], []
+
+
+@callback(
+    Output('employment-chart', 'figure'),
+    [Input('employment-view-radio', 'value'),
+     Input('employment-years-dropdown', 'value')]
+)
+def update_employment_chart(view_mode, selected_years):
+    """Update employment chart"""
+    print(f"🔄 Updating employment chart: view={view_mode}, years={selected_years}")
+    return create_employment_chart(employment_df, view_mode, selected_years)
+
+
+@callback(
+    Output('expense-chart', 'figure'),
+    [Input('expense-chart-radio', 'value'),
+     Input('expense-years-dropdown', 'value')]
+)
+def update_expense_chart(chart_type, selected_years):
+    """Update expense chart"""
+    print(f"🔄 Updating expense chart: type={chart_type}, years={selected_years}")
+    return create_expense_chart(expense_df, chart_type, "Values", selected_years)
+
+
+print("🎯 Student Labour Report initialized successfully!")
