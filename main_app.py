@@ -96,14 +96,23 @@ DATABASE = 'usc_ir_new.db'
 TOKEN_EXPIRY_HOURS = 8
 BASE_URL = os.environ.get('BASE_URL', 'http://localhost')
 
-# Initialize the Dash app
-app = dash.Dash(__name__,
-                external_stylesheets=[dbc.themes.BOOTSTRAP],
-                suppress_callback_exceptions=True,
-                meta_tags=[
-                    {"name": "viewport", "content": "width=device-width, initial-scale=1"}
-                ])
+# Add these imports first
+from auth_routes import setup_auth_routes, create_auth_app
+from flask import session
 
+# Create Flask server first
+flask_server = create_auth_app()
+
+# Initialize Dash app with the Flask server
+app = dash.Dash(__name__,
+                server=flask_server,
+                external_stylesheets=[dbc.themes.BOOTSTRAP],
+                suppress_callback_exceptions=True)
+
+# Setup authentication routes
+setup_auth_routes(flask_server)
+
+# Expose server for deployment
 server = app.server
 
 # USC Brand Colors
@@ -569,74 +578,42 @@ def authenticate_user(email_or_username, password):
     return {'success': False, 'message': 'Invalid credentials'}
 
 
-def verify_google_token(credential):
-    """Verify Google ID token and extract user info"""
+def validate_session_simple(token=None):
+    """Simplified session validation"""
     try:
-        client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+        # First check Flask session
+        if not token:
+            token = session.get('token')
 
-        idinfo = id_token.verify_oauth2_token(
-            credential,
-            requests.Request(),
-            client_id
-        )
+        if not token:
+            return None
 
-        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-            raise ValueError('Wrong issuer.')
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
 
-        user_info = {
-            'email': idinfo['email'],
-            'name': idinfo['name'],
-            'picture': idinfo.get('picture', ''),
-            'email_verified': idinfo.get('email_verified', False)
-        }
+        cursor.execute('''
+            SELECT u.id, u.email, u.username, u.full_name, u.department, u.position, u.role
+            FROM users u
+            JOIN sessions s ON u.id = s.user_id
+            WHERE s.token = ? AND s.expires_at > datetime('now')
+        ''', (token,))
 
-        print(f"✅ Google OAuth: Verified user {user_info['email']}")
-        return {'success': True, 'user': user_info}
+        user_row = cursor.fetchone()
+        conn.close()
 
+        if user_row:
+            return {
+                'id': user_row[0],
+                'email': user_row[1],
+                'username': user_row[2],
+                'full_name': user_row[3],
+                'department': user_row[4],
+                'position': user_row[5],
+                'role': user_row[6]
+            }
+        return None
     except Exception as e:
-        print(f"❌ Google OAuth verification failed: {e}")
-        return {'success': False, 'error': str(e)}
-def validate_session(token):
-    """Validate user session with debug logging"""
-    print(f"🔍 DEBUG: Validating token: {token[:20] if token else 'None'}...")
-
-    if not token:
-        print("❌ DEBUG: No token provided")
-        return None
-
-    payload = decode_token(token)
-    if not payload:
-        print("❌ DEBUG: Failed to decode token")
-        return None
-
-    print(f"✅ DEBUG: Token decoded successfully, user_id: {payload.get('user_id')}")
-
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        SELECT u.id, u.email, u.username, u.full_name, u.department, u.position, u.role
-        FROM sessions s
-        JOIN users u ON s.user_id = u.id
-        WHERE s.token = ? AND s.expires_at > ? AND u.is_active = 1 AND u.is_approved = 1
-    ''', (token, datetime.now()))
-
-    user = cursor.fetchone()
-    conn.close()
-
-    if user:
-        print(f"✅ DEBUG: User found: {user[2]} ({user[1]})")
-        return {
-            'id': user[0],
-            'email': user[1],
-            'username': user[2],
-            'full_name': user[3],
-            'department': user[4],
-            'position': user[5],
-            'role': user[6]
-        }
-    else:
-        print("❌ DEBUG: No valid user session found")
+        print(f"Session validation error: {e}")
         return None
 
 
@@ -1282,390 +1259,6 @@ def create_admin_dashboard(user):
     ])
 
 
-# 4. REPLACE your existing create_login_page function with this enhanced version:
-# 3. REPLACE your create_login_page() function with this version
-# REPLACE your create_login_page() function with this FIXED version
-
-def create_login_page():
-    """Create login page with WORKING Google OAuth"""
-    return html.Div([
-        # Load Google Sign-In library first
-        html.Script(src="https://accounts.google.com/gsi/client", **{"async": True, "defer": True}),
-
-        dbc.Container([
-            dbc.Row([
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardHeader([
-                            html.H3("USC Institutional Research Login", className="text-center mb-0"),
-                        ]),
-                        dbc.CardBody([
-                            # Google Sign-In Section with Debug Info
-                            html.Div([
-                                html.H5("Google Sign-In", className="text-center mb-3",
-                                        style={"color": USC_COLORS["primary_green"]}),
-                                html.P("Sign in with your Google account for quick access:",
-                                       className="text-center text-muted mb-4"),
-
-                                # Status indicator
-                                html.Div(id="google-status", className="text-center mb-2", children=[
-                                    html.Small("Initializing Google Sign-In...", className="text-muted")
-                                ]),
-
-                                # Google Sign-In Button Container
-                                html.Div(
-                                    id="google-signin-div",
-                                    style={
-                                        "minHeight": "60px",
-                                        "border": "2px dashed #007bff",
-                                        "borderRadius": "8px",
-                                        "display": "flex",
-                                        "alignItems": "center",
-                                        "justifyContent": "center",
-                                        "margin": "15px 0",
-                                        "backgroundColor": "#f8f9fa",
-                                        "padding": "15px"
-                                    },
-                                    children=[
-                                        html.Div([
-                                            html.I(className="fas fa-spinner fa-spin me-2"),
-                                            "Loading Google Sign-In..."
-                                        ], className="text-muted")
-                                    ]
-                                ),
-
-                                # Manual fallback button
-                                dbc.Button([
-                                    html.I(className="fab fa-google me-2"),
-                                    "Try Manual Google Sign-In"
-                                ], id="manual-google-btn", color="outline-primary", size="sm",
-                                    className="w-100 mb-3", style={"display": "none"}),
-
-                                # Hidden input to store Google credential
-                                dcc.Store(id="google-credential-store", data=None),
-
-                                dbc.Alert([
-                                    html.I(className="fas fa-info-circle me-2"),
-                                    "USC employees (@usc.edu.tt) get automatic access."
-                                ], color="info", className="mb-4")
-                            ]),
-
-                            html.Hr(className="my-4"),
-
-                            # USC Employee Quick Login Section (keep your existing one)
-                            html.Div([
-                                html.H5("USC Employees - Quick Access", className="text-center mb-3",
-                                        style={"color": USC_COLORS["primary_green"]}),
-                                html.P("USC employees can get instant access by entering their details below:",
-                                       className="text-center text-muted mb-4"),
-
-                                dbc.Form([
-                                    dbc.Row([
-                                        dbc.Label("USC Email", html_for="usc-email", width=12),
-                                        dbc.Col([
-                                            dbc.Input(
-                                                type="email",
-                                                id="usc-email",
-                                                placeholder="firstname.lastname@usc.edu.tt",
-                                                className="mb-3"
-                                            )
-                                        ], width=12)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Label("Full Name", html_for="usc-name", width=12),
-                                        dbc.Col([
-                                            dbc.Input(
-                                                type="text",
-                                                id="usc-name",
-                                                placeholder="Enter your full name",
-                                                className="mb-3"
-                                            )
-                                        ], width=12)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Button([
-                                                html.I(className="fas fa-university me-2"),
-                                                "USC Employee Login"
-                                            ], id="usc-login-btn", color="success",
-                                                className="w-100", size="lg")
-                                        ], width=12)
-                                    ])
-                                ]),
-
-                                dbc.Alert([
-                                    html.I(className="fas fa-info-circle me-2"),
-                                    "USC employees (@usc.edu.tt) get automatic access to all data except financial reports."
-                                ], color="info", className="mt-3")
-                            ]),
-
-                            html.Hr(className="my-4"),
-
-                            # Traditional Login Section (keep exactly as is)
-                            html.Div([
-                                html.H5("Traditional Login", className="text-center mb-3",
-                                        style={"color": USC_COLORS["secondary_green"]}),
-
-                                dbc.Form([
-                                    dbc.Row([
-                                        dbc.Label("Email or Username", html_for="login-email", width=12),
-                                        dbc.Col([
-                                            dbc.Input(
-                                                type="text",
-                                                id="login-email",
-                                                placeholder="Enter your email or username",
-                                                className="mb-3",
-                                                value="admin"  # Pre-fill for testing
-                                            )
-                                        ], width=12)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Label("Password", html_for="login-password", width=12),
-                                        dbc.Col([
-                                            dbc.Input(
-                                                type="password",
-                                                id="login-password",
-                                                placeholder="Enter your password",
-                                                className="mb-3",
-                                                value="admin123"  # Pre-fill for testing
-                                            )
-                                        ], width=12)
-                                    ]),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Button([
-                                                html.I(className="fas fa-sign-in-alt me-2"),
-                                                "Sign In"
-                                            ], id="login-submit", color="primary",
-                                                className="w-100", size="lg")
-                                        ], width=12)
-                                    ])
-                                ]),
-
-                                dbc.Alert([
-                                    html.I(className="fas fa-user me-2"),
-                                    "Test credentials - Username: admin, Password: admin123"
-                                ], color="secondary", className="mt-3")
-                            ]),
-
-                            html.Hr(className="my-4"),
-
-                            # Links Section (keep as is)
-                            html.Div([
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.P([
-                                            "Don't have an account? ",
-                                            dcc.Link("Register here", href="/register",
-                                                     style={"color": USC_COLORS["primary_green"]})
-                                        ], className="text-center mb-2")
-                                    ], width=12),
-                                    dbc.Col([
-                                        html.P([
-                                            "Need access? ",
-                                            dcc.Link("Request access", href="/request",
-                                                     style={"color": USC_COLORS["secondary_green"]})
-                                        ], className="text-center mb-0")
-                                    ], width=12)
-                                ])
-                            ]),
-
-                            # Alert for login messages
-                            html.Div(id="login-alert", className="mt-3")
-                        ])
-                    ], className="shadow")
-                ], md=8, lg=6, className="mx-auto")
-            ], className="justify-content-center min-vh-100 align-items-center")
-        ], fluid=True, className="py-5", style={"backgroundColor": "#f8f9fa"}),
-
-        # ENHANCED JavaScript with better error handling and debugging
-        html.Script("""
-            let googleInitialized = false;
-            let initAttempts = 0;
-            const maxAttempts = 10;
-
-            function updateStatus(message, isError = false) {
-                console.log('🔍 GOOGLE: ' + message);
-
-                const statusEl = document.getElementById('google-status');
-                if (statusEl) {
-                    const color = isError ? 'text-danger' : 'text-success';
-                    const icon = isError ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
-                    statusEl.innerHTML = `<small class="${color}"><i class="${icon} me-1"></i>${message}</small>`;
-                }
-            }
-
-            function showManualButton() {
-                const manualBtn = document.getElementById('manual-google-btn');
-                if (manualBtn) {
-                    manualBtn.style.display = 'block';
-                }
-            }
-
-            function handleCredentialResponse(response) {
-                updateStatus('🎉 Google credential received!');
-                console.log('🔍 Credential length:', response.credential.length);
-
-                try {
-                    // Store credential using multiple methods for reliability
-                    if (window.dash_clientside && window.dash_clientside.set_props) {
-                        window.dash_clientside.set_props("google-credential-store", {
-                            data: response.credential
-                        });
-                        updateStatus('Credential sent to backend');
-                    } else {
-                        // Fallback method
-                        window.googleCredential = response.credential;
-                        const event = new CustomEvent('google-credential-ready', {
-                            detail: { credential: response.credential }
-                        });
-                        document.dispatchEvent(event);
-                        updateStatus('Credential stored (fallback method)');
-                    }
-                } catch (error) {
-                    updateStatus('Error processing credential: ' + error.message, true);
-                }
-            }
-
-            function triggerManualGoogleSignIn() {
-                updateStatus('Triggering manual Google sign-in...');
-
-                if (typeof google !== 'undefined' && google.accounts) {
-                    try {
-                        google.accounts.id.prompt((notification) => {
-                            if (notification.isNotDisplayed()) {
-                                updateStatus('Sign-in blocked: ' + notification.getNotDisplayedReason(), true);
-                            } else {
-                                updateStatus('Manual sign-in triggered successfully');
-                            }
-                        });
-                    } catch (error) {
-                        updateStatus('Manual sign-in error: ' + error.message, true);
-                    }
-                } else {
-                    updateStatus('Google library not available', true);
-                }
-            }
-
-            function initializeGoogleSignIn() {
-                initAttempts++;
-                updateStatus(`Attempting to initialize Google Sign-In (${initAttempts}/${maxAttempts})...`);
-
-                // Check if Google library is loaded
-                if (typeof google === 'undefined') {
-                    updateStatus('Google library not found', true);
-                    if (initAttempts < maxAttempts) {
-                        setTimeout(initializeGoogleSignIn, 2000);
-                    } else {
-                        updateStatus('Failed to load Google library after maximum attempts', true);
-                        showManualButton();
-                    }
-                    return;
-                }
-
-                // Check if Google Accounts API is available
-                if (!google.accounts) {
-                    updateStatus('Google Accounts API not ready', true);
-                    if (initAttempts < maxAttempts) {
-                        setTimeout(initializeGoogleSignIn, 2000);
-                    } else {
-                        updateStatus('Google Accounts API failed to load', true);
-                        showManualButton();
-                    }
-                    return;
-                }
-
-                if (googleInitialized) {
-                    updateStatus('Google already initialized');
-                    return;
-                }
-
-                try {
-                    updateStatus('Initializing Google OAuth...');
-
-                    // Initialize Google Sign-In
-                    google.accounts.id.initialize({
-                        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
-                        callback: handleCredentialResponse,
-                        auto_select: false,
-                        cancel_on_tap_outside: false
-                    });
-
-                    updateStatus('Google OAuth initialized, rendering button...');
-
-                    const signInDiv = document.getElementById("google-signin-div");
-                    if (signInDiv) {
-                        // Clear loading content
-                        signInDiv.innerHTML = '';
-
-                        // Render the Google Sign-In button
-                        google.accounts.id.renderButton(signInDiv, {
-                            theme: "filled_blue",
-                            size: "large",
-                            width: "300",
-                            text: "signin_with",
-                            logo_alignment: "left"
-                        });
-
-                        googleInitialized = true;
-                        updateStatus('✅ Google Sign-In ready! Click the button above.');
-
-                        // Remove debug styling
-                        signInDiv.style.border = '1px solid #ddd';
-                        signInDiv.style.backgroundColor = 'white';
-
-                        // Verify button was rendered
-                        setTimeout(() => {
-                            const button = signInDiv.querySelector('iframe, div[role="button"]');
-                            if (button) {
-                                updateStatus('✅ Google button is interactive');
-                            } else {
-                                updateStatus('⚠️ Button rendered but may not be interactive', true);
-                                showManualButton();
-                            }
-                        }, 1000);
-
-                    } else {
-                        updateStatus('Could not find button container', true);
-                    }
-
-                } catch (error) {
-                    updateStatus('Initialization error: ' + error.message, true);
-                    console.error('Google Sign-In initialization error:', error);
-                    showManualButton();
-                }
-            }
-
-            // Set up event listeners
-            document.addEventListener('DOMContentLoaded', function() {
-                updateStatus('DOM loaded, starting Google Sign-In setup...');
-
-                // Manual button event listener
-                const manualBtn = document.getElementById('manual-google-btn');
-                if (manualBtn) {
-                    manualBtn.addEventListener('click', triggerManualGoogleSignIn);
-                }
-
-                // Start initialization
-                setTimeout(initializeGoogleSignIn, 1000);
-            });
-
-            // Progressive retry strategy
-            setTimeout(initializeGoogleSignIn, 2000);
-            setTimeout(initializeGoogleSignIn, 5000);
-            setTimeout(initializeGoogleSignIn, 10000);
-
-            // Listen for window load event as backup
-            window.addEventListener('load', function() {
-                if (!googleInitialized) {
-                    updateStatus('Window loaded, retrying Google initialization...');
-                    setTimeout(initializeGoogleSignIn, 1000);
-                }
-            });
-        """)
-    ])
-
-# 5. ADD this new callback for USC employee login:
 
 @app.callback(
     [Output('session-store', 'data', allow_duplicate=True),
@@ -1758,56 +1351,7 @@ def handle_usc_employee_login(n_clicks, email, name):
         print(f"USC login error: {e}")
         return dash.no_update, dbc.Alert(f"Login error: {str(e)}", color="danger"), dash.no_update
 
-# Add this JavaScript for Google Sign-In
-GOOGLE_SIGNIN_SCRIPT = f"""
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-<script>
-function handleCredentialResponse(response) {{
-    // Send the credential to your backend
-    fetch('/auth/google', {{
-        method: 'POST',
-        headers: {{
-            'Content-Type': 'application/json',
-        }},
-        body: JSON.stringify({{
-            credential: response.credential
-        }})
-    }})
-    .then(response => response.json())
-    .then(data => {{
-        if (data.success) {{
-            window.location.href = '/dashboard';
-        }} else {{
-            alert('Authentication failed: ' + data.error);
-        }}
-    }})
-    .catch((error) => {{
-        console.error('Error:', error);
-        alert('Authentication error occurred');
-    }});
-}}
 
-window.onload = function() {{
-    google.accounts.id.initialize({{
-        client_id: "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com",
-        callback: handleCredentialResponse
-    }});
-
-    google.accounts.id.renderButton(
-        document.getElementById("google-signin-btn"),
-        {{
-            theme: "filled_blue",
-            size: "large",
-            width: "100%",
-            text: "signin_with"
-        }}
-    );
-
-    // Enable one-tap sign-in for USC domain
-    google.accounts.id.prompt();
-}};
-</script>
-"""
 
 def create_register_page():
     """Create registration page"""
@@ -2282,11 +1826,19 @@ def display_page(pathname, session_data):
         print(f"🔍 DEBUG: Accessing pathname: {pathname}")
         print(f"🔍 DEBUG: Session data: {session_data}")
 
+        # Check authentication - try multiple sources
         user = None
-        if session_data and 'token' in session_data:
-            print("🔍 DEBUG: Token found in session, validating...")
-            user = validate_session(session_data['token'])
-            print(f"🔍 DEBUG: User validation result: {user}")
+
+        # Try Flask session first
+        flask_token = session.get('token')
+        if flask_token:
+            user = validate_session_simple(flask_token)
+            print(f"🔍 DEBUG: Flask session user: {user}")
+
+        # Try Dash session store as backup
+        if not user and session_data and 'token' in session_data:
+            user = validate_session_simple(session_data['token'])
+            print(f"🔍 DEBUG: Dash session user: {user}")
         else:
             print("❌ DEBUG: No token in session data")
 
@@ -2300,7 +1852,10 @@ def display_page(pathname, session_data):
         elif pathname == '/governance':
             return navbar, create_governance_layout()
         elif pathname == '/login':
-            return navbar, create_login_page()
+        # Redirect to the standalone login page served by Flask
+            return navbar, html.Div([
+                html.Script('window.location.href = "/login";')
+            ])
         elif pathname == '/register':
             return navbar, create_register_page()
         elif pathname == '/request':
@@ -2926,103 +2481,30 @@ def handle_register(n_clicks, email, username, password, confirm, fullname, depa
     prevent_initial_call=True
 )
 def handle_logout(n_clicks, session_data):
-    """Handle logout"""
-    if n_clicks and session_data and 'token' in session_data:
-        logout_user(session_data['token'])
-        return {}, "/login"
+    """Handle logout - updated for new auth system"""
+    if n_clicks:
+        try:
+            # Clear Dash session
+            token = session_data.get('token') if session_data else None
+
+            if token:
+                # Remove from database
+                conn = sqlite3.connect(DATABASE)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM sessions WHERE token = ?', (token,))
+                conn.commit()
+                conn.close()
+
+            # Clear Flask session
+            session.clear()
+
+            return {}, "/login"
+        except Exception as e:
+            print(f"Logout error: {e}")
+            return {}, "/login"
+
     return dash.no_update, dash.no_update
 
-
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True),
-     Output('login-alert', 'children', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('google-credential-store', 'data')],
-    prevent_initial_call=True
-)
-def handle_google_oauth_login(credential):
-    """Handle Google OAuth login"""
-    if not credential or len(str(credential)) < 100:
-        return dash.no_update, dash.no_update, dash.no_update
-
-    print(f"🔍 Processing Google credential of length {len(credential)}")
-
-    try:
-        # Verify Google token
-        result = verify_google_token(credential)
-
-        if not result['success']:
-            return dash.no_update, dbc.Alert([
-                html.I(className="fas fa-exclamation-triangle me-2"),
-                f"Google authentication failed: {result['error']}"
-            ], color="danger"), dash.no_update
-
-        user_info = result['user']
-        email = user_info['email']
-        name = user_info['name']
-
-        print(f"✅ Google token verified for: {email}")
-
-        # Create or update user in database
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
-        existing_user = cursor.fetchone()
-
-        if existing_user:
-            user_id = existing_user[0]
-            cursor.execute('''
-                UPDATE users 
-                SET last_login = ?, full_name = ?, google_auth = 1
-                WHERE id = ?
-            ''', (datetime.now(), name, user_id))
-            print(f"✅ Updated existing user: {email}")
-        else:
-            # Determine role based on USC domain
-            role = 'employee' if email.endswith('@usc.edu.tt') else 'user'
-            is_approved = 1 if email.endswith('@usc.edu.tt') else 0
-
-            cursor.execute('''
-                INSERT INTO users 
-                (email, username, full_name, role, is_active, is_approved, google_auth, created_at, last_login)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (email, email.split('@')[0], name, role, 1, is_approved, 1, datetime.now(), datetime.now()))
-            user_id = cursor.lastrowid
-            print(f"✅ Created new user: {email} (ID: {user_id})")
-
-        conn.commit()
-        conn.close()
-
-        # Generate session token
-        token = generate_token(user_id)
-
-        if not token:
-            return dash.no_update, dbc.Alert("Session creation failed", color="danger"), dash.no_update
-
-        # Create session data
-        session_data = {
-            'token': token,
-            'user': {
-                'id': user_id,
-                'email': email,
-                'username': email.split('@')[0],
-                'full_name': name,
-                'role': role
-            }
-        }
-
-        return session_data, dbc.Alert([
-            html.I(className="fas fa-check-circle me-2"),
-            f"Welcome {name}! Google sign-in successful."
-        ], color="success"), "/"  # Redirect to HOME instead of dashboard
-
-    except Exception as e:
-        print(f"❌ Google OAuth error: {e}")
-        return dash.no_update, dbc.Alert([
-            html.I(className="fas fa-bug me-2"),
-            f"Login error: {str(e)}"
-        ], color="danger"), dash.no_update
 
 
 # Add callback for access requests table
@@ -3088,8 +2570,27 @@ def has_financial_access(user):
     return user.get('role') == 'admin'
 
 
+@app.callback(
+    Output('session-store', 'data', allow_duplicate=True),
+    [Input('url', 'pathname')],
+    prevent_initial_call=True
+)
+def sync_flask_session(pathname):
+    """Sync Flask session with Dash session store"""
+    try:
+        flask_token = session.get('token')
+        user_id = session.get('user_id')
+        email = session.get('email')
 
-
+        if flask_token and user_id:
+            return {
+                'token': flask_token,
+                'user_id': user_id,
+                'email': email
+            }
+        return {}
+    except:
+        return {}
 
 def is_usc_employee(email):
     """Check if email belongs to USC domain"""

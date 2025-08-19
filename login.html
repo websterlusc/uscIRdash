@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USC Institutional Research - Sign In</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Sign-In -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <style>
+        :root {
+            --usc-green: #1B5E20;
+            --usc-light-green: #4CAF50;
+            --usc-yellow: #FDD835;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--usc-green) 0%, var(--usc-light-green) 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            max-width: 450px;
+            width: 100%;
+        }
+        
+        .card-header {
+            background: var(--usc-green);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .usc-logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--usc-green);
+            font-weight: bold;
+        }
+        
+        .card-body {
+            padding: 2rem;
+        }
+        
+        .google-signin-container {
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            margin: 1rem 0;
+            padding: 1rem;
+            background: #f8f9fa;
+        }
+        
+        .status-message {
+            text-align: center;
+            margin: 1rem 0;
+            padding: 0.5rem;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .status-loading {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status-success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .manual-signin-btn {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .manual-signin-btn:hover {
+            background: #3367d6;
+            transform: translateY(-2px);
+        }
+        
+        .alternative-login {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .btn-usc {
+            background: var(--usc-green);
+            border-color: var(--usc-green);
+            color: white;
+        }
+        
+        .btn-usc:hover {
+            background: var(--usc-light-green);
+            border-color: var(--usc-light-green);
+            color: white;
+        }
+        
+        .form-control:focus {
+            border-color: var(--usc-green);
+            box-shadow: 0 0 0 0.2rem rgba(27, 94, 32, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="card-header">
+                <div class="usc-logo">
+                    USC
+                </div>
+                <h3 class="mb-0">Institutional Research</h3>
+                <p class="mb-0 mt-2 opacity-75">University of the Southern Caribbean</p>
+            </div>
+            
+            <div class="card-body">
+                <!-- Status Messages -->
+                <div id="status-message" class="status-message status-loading">
+                    <i class="fas fa-spinner fa-spin me-2"></i>
+                    Initializing secure sign-in...
+                </div>
+                
+                <!-- Google Sign-In Section -->
+                <div class="text-center mb-4">
+                    <h5 class="text-muted mb-3">
+                        <i class="fab fa-google me-2"></i>
+                        Quick Sign-In
+                    </h5>
+                    
+                    <div id="google-signin-button" class="google-signin-container">
+                        <div class="text-muted">
+                            <i class="fas fa-spinner fa-spin me-2"></i>
+                            Loading Google Sign-In...
+                        </div>
+                    </div>
+                    
+                    <button id="manual-signin" class="manual-signin-btn" style="display: none;">
+                        <i class="fab fa-google me-2"></i>
+                        Sign in with Google
+                    </button>
+                </div>
+                
+                <!-- Alternative Login (if needed) -->
+                <div class="alternative-login" style="display: none;">
+                    <h6 class="text-center text-muted mb-3">
+                        <i class="fas fa-user me-2"></i>
+                        Alternative Login
+                    </h6>
+                    
+                    <form id="regular-login-form">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username or Email</label>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                        <button type="submit" class="btn btn-usc w-100">
+                            <i class="fas fa-sign-in-alt me-2"></i>
+                            Sign In
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Footer Links -->
+                <div class="text-center mt-4">
+                    <p class="text-muted small">
+                        Need access? 
+                        <a href="/request" class="text-decoration-none" style="color: var(--usc-green);">
+                            Request Account
+                        </a>
+                    </p>
+                    <p class="text-muted small">
+                        <a href="mailto:ir@usc.edu.tt" class="text-decoration-none" style="color: var(--usc-green);">
+                            <i class="fas fa-envelope me-1"></i>
+                            Contact Support
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const GOOGLE_CLIENT_ID = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com";
+        let googleInitialized = false;
+        let initAttempts = 0;
+        const maxAttempts = 5;
+
+        // Status message functions
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.className = `status-message ${isError ? 'status-error' : 'status-loading'}`;
+            statusEl.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>${message}`;
+        }
+
+        function showSuccess(message) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.className = 'status-message status-success';
+            statusEl.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
+        }
+
+        // Google credential response handler
+        function handleCredentialResponse(response) {
+            showSuccess('Google sign-in successful! Redirecting...');
+            
+            // Send credential to backend
+            fetch('/auth/google', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    credential: response.credential
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccess('Authentication successful! Redirecting to dashboard...');
+                    setTimeout(() => {
+                        window.location.href = data.redirect || '/dashboard';
+                    }, 1500);
+                } else {
+                    updateStatus(`Authentication failed: ${data.message}`, true);
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                updateStatus('Network error occurred. Please try again.', true);
+            });
+        }
+
+        // Manual sign-in trigger
+        function triggerManualSignIn() {
+            if (typeof google !== 'undefined' && google.accounts) {
+                try {
+                    updateStatus('Triggering Google sign-in...');
+                    google.accounts.id.prompt((notification) => {
+                        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                            updateStatus('Sign-in was cancelled or not available', true);
+                        } else {
+                            updateStatus('Sign-in prompted successfully');
+                        }
+                    });
+                } catch (error) {
+                    updateStatus('Manual sign-in error: ' + error.message, true);
+                }
+            } else {
+                updateStatus('Google library not available', true);
+            }
+        }
+
+        // Show manual button as fallback
+        function showManualButton() {
+            document.getElementById('manual-signin').style.display = 'block';
+            document.getElementById('manual-signin').onclick = triggerManualSignIn;
+        }
+
+        // Initialize Google Sign-In
+        function initializeGoogleSignIn() {
+            initAttempts++;
+            updateStatus(`Initializing Google Sign-In (attempt ${initAttempts})...`);
+
+            if (typeof google === 'undefined') {
+                if (initAttempts < maxAttempts) {
+                    setTimeout(initializeGoogleSignIn, 2000);
+                    return;
+                } else {
+                    updateStatus('Failed to load Google Sign-In library', true);
+                    showManualButton();
+                    return;
+                }
+            }
+
+            if (!google.accounts) {
+                if (initAttempts < maxAttempts) {
+                    setTimeout(initializeGoogleSignIn, 2000);
+                    return;
+                } else {
+                    updateStatus('Google Accounts API not available', true);
+                    showManualButton();
+                    return;
+                }
+            }
+
+            if (googleInitialized) {
+                updateStatus('Google Sign-In already initialized');
+                return;
+            }
+
+            try {
+                updateStatus('Configuring Google OAuth...');
+
+                // Initialize Google Sign-In
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleCredentialResponse,
+                    auto_select: false,
+                    cancel_on_tap_outside: false
+                });
+
+                updateStatus('Rendering sign-in button...');
+
+                const signInDiv = document.getElementById('google-signin-button');
+                if (signInDiv) {
+                    signInDiv.innerHTML = '';
+
+                    // Render the Google Sign-In button
+                    google.accounts.id.renderButton(signInDiv, {
+                        theme: "filled_blue",
+                        size: "large",
+                        width: "320",
+                        text: "signin_with",
+                        logo_alignment: "left"
+                    });
+
+                    googleInitialized = true;
+                    showSuccess('Google Sign-In ready! Click the button above to continue.');
+                    
+                    // Hide status after 3 seconds
+                    setTimeout(() => {
+                        document.getElementById('status-message').style.display = 'none';
+                    }, 3000);
+                } else {
+                    updateStatus('Sign-in container not found', true);
+                }
+
+            } catch (error) {
+                updateStatus('Failed to initialize Google Sign-In: ' + error.message, true);
+                showManualButton();
+            }
+        }
+
+        // Regular login form handler
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Google Sign-In when page loads
+            setTimeout(initializeGoogleSignIn, 500);
+
+            // Handle regular login form if shown
+            const regularForm = document.getElementById('regular-login-form');
+            if (regularForm) {
+                regularForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const username = document.getElementById('username').value;
+                    const password = document.getElementById('password').value;
+                    
+                    updateStatus('Signing in...');
+                    
+                    fetch('/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            username: username,
+                            password: password
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showSuccess('Login successful! Redirecting...');
+                            setTimeout(() => {
+                                window.location.href = data.redirect || '/dashboard';
+                            }, 1500);
+                        } else {
+                            updateStatus(data.message || 'Login failed', true);
+                        }
+                    })
+                    .catch((error) => {
+                        updateStatus('Network error occurred', true);
+                    });
+                });
+            }
+        });
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('Page error:', e.error);
+            updateStatus('An error occurred. Please refresh the page.', true);
+        });
+    </script>
+</body>
+</html>
