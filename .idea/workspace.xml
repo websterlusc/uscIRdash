@@ -5,9 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a56f6a57-312c-431a-939b-8b07114b54b5" name="Changes" comment="atempting to add login">
-      <change afterPath="$PROJECT_DIR$/auth_routes.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/standalone_login.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/find_duplicate_callbacks.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/auth_routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/auth_routes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/login.html" beforeDir="false" afterPath="$PROJECT_DIR$/login.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main_app.py" beforeDir="false" afterPath="$PROJECT_DIR$/main_app.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/usc_ir_new.db" beforeDir="false" afterPath="$PROJECT_DIR$/usc_ir_new.db" afterDir="false" />
     </list>
@@ -41,6 +42,7 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Python.find_duplicate_callbacks.executor": "Run",
     "Python.google_oauth_diagnostic.executor": "Run",
     "Python.main.executor": "Run",
     "Python.main_app.executor": "Run",
@@ -60,7 +62,29 @@
       <recent name="C:\Users\savio\PycharmProjects\UscIRDash" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.google_oauth_diagnostic">
+  <component name="RunManager" selected="Python.find_duplicate_callbacks">
+    <configuration name="find_duplicate_callbacks" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="UscIRDash" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/find_duplicate_callbacks.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="google_oauth_diagnostic" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="UscIRDash" />
       <option name="ENV_FILES" value="" />
@@ -129,6 +153,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.find_duplicate_callbacks" />
         <item itemvalue="Python.google_oauth_diagnostic" />
         <item itemvalue="Python.main_app" />
       </list>
@@ -526,7 +551,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755618734222</updated>
     </task>
-    <option name="localTasksCounter" value="48" />
+    <task id="LOCAL-00048" summary="atempting to add login">
+      <option name="closed" value="true" />
+      <created>1755633032860</created>
+      <option name="number" value="00048" />
+      <option name="presentableId" value="LOCAL-00048" />
+      <option name="project" value="LOCAL" />
+      <updated>1755633032860</updated>
+    </task>
+    <option name="localTasksCounter" value="49" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

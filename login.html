@@ -111,34 +111,17 @@
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: none;
         }
-        
+
         .manual-signin-btn:hover {
             background: #3367d6;
             transform: translateY(-2px);
         }
-        
-        .alternative-login {
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid #dee2e6;
-        }
-        
-        .btn-usc {
-            background: var(--usc-green);
-            border-color: var(--usc-green);
-            color: white;
-        }
-        
-        .btn-usc:hover {
-            background: var(--usc-light-green);
-            border-color: var(--usc-light-green);
-            color: white;
-        }
-        
-        .form-control:focus {
-            border-color: var(--usc-green);
-            box-shadow: 0 0 0 0.2rem rgba(27, 94, 32, 0.25);
+
+        .countdown {
+            font-weight: bold;
+            color: var(--usc-green);
         }
     </style>
 </head>
@@ -146,67 +129,42 @@
     <div class="login-container">
         <div class="login-card">
             <div class="card-header">
-                <div class="usc-logo">
-                    USC
-                </div>
+                <div class="usc-logo">USC</div>
                 <h3 class="mb-0">Institutional Research</h3>
                 <p class="mb-0 mt-2 opacity-75">University of the Southern Caribbean</p>
             </div>
-            
+
             <div class="card-body">
                 <!-- Status Messages -->
                 <div id="status-message" class="status-message status-loading">
                     <i class="fas fa-spinner fa-spin me-2"></i>
                     Initializing secure sign-in...
                 </div>
-                
+
                 <!-- Google Sign-In Section -->
                 <div class="text-center mb-4">
                     <h5 class="text-muted mb-3">
                         <i class="fab fa-google me-2"></i>
                         Quick Sign-In
                     </h5>
-                    
+
                     <div id="google-signin-button" class="google-signin-container">
                         <div class="text-muted">
                             <i class="fas fa-spinner fa-spin me-2"></i>
                             Loading Google Sign-In...
                         </div>
                     </div>
-                    
-                    <button id="manual-signin" class="manual-signin-btn" style="display: none;">
+
+                    <button id="manual-signin" class="manual-signin-btn">
                         <i class="fab fa-google me-2"></i>
                         Sign in with Google
                     </button>
                 </div>
-                
-                <!-- Alternative Login (if needed) -->
-                <div class="alternative-login" style="display: none;">
-                    <h6 class="text-center text-muted mb-3">
-                        <i class="fas fa-user me-2"></i>
-                        Alternative Login
-                    </h6>
-                    
-                    <form id="regular-login-form">
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Username or Email</label>
-                            <input type="text" class="form-control" id="username" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="password" required>
-                        </div>
-                        <button type="submit" class="btn btn-usc w-100">
-                            <i class="fas fa-sign-in-alt me-2"></i>
-                            Sign In
-                        </button>
-                    </form>
-                </div>
-                
+
                 <!-- Footer Links -->
                 <div class="text-center mt-4">
                     <p class="text-muted small">
-                        Need access? 
+                        Need access?
                         <a href="/request" class="text-decoration-none" style="color: var(--usc-green);">
                             Request Account
                         </a>
@@ -234,18 +192,41 @@
             const statusEl = document.getElementById('status-message');
             statusEl.className = `status-message ${isError ? 'status-error' : 'status-loading'}`;
             statusEl.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>${message}`;
+            console.log(`Status: ${message}`, isError ? 'error' : 'info');
         }
 
         function showSuccess(message) {
             const statusEl = document.getElementById('status-message');
             statusEl.className = 'status-message status-success';
             statusEl.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
+            console.log(`Success: ${message}`);
+        }
+
+        function redirectWithCountdown(url, delay = 2000) {
+            let count = Math.ceil(delay / 1000);
+
+            function updateCountdown() {
+                if (count > 0) {
+                    showSuccess(`Redirecting to dashboard in <span class="countdown">${count}</span> seconds...`);
+                    count--;
+                    setTimeout(updateCountdown, 1000);
+                } else {
+                    showSuccess('Redirecting now...');
+                    setTimeout(() => {
+                        console.log(`Redirecting to: ${url}`);
+                        window.location.href = url;
+                    }, 500);
+                }
+            }
+
+            updateCountdown();
         }
 
         // Google credential response handler
         function handleCredentialResponse(response) {
-            showSuccess('Google sign-in successful! Redirecting...');
-            
+            console.log('Google credential received:', response.credential ? 'Yes' : 'No');
+            showSuccess('Google sign-in successful! Processing...');
+
             // Send credential to backend
             fetch('/auth/google', {
                 method: 'POST',
@@ -256,20 +237,34 @@
                     credential: response.credential
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('Auth response:', data);
+
                 if (data.success) {
-                    showSuccess('Authentication successful! Redirecting to dashboard...');
-                    setTimeout(() => {
-                        window.location.href = data.redirect || '/dashboard';
-                    }, 1500);
+                    showSuccess('✅ Authentication successful!');
+
+                    // Store token in localStorage for debugging
+                    if (data.token) {
+                        localStorage.setItem('auth_token', data.token);
+                        localStorage.setItem('user_data', JSON.stringify(data.user));
+                        console.log('Stored auth data:', data.token.substring(0, 20) + '...');
+                    }
+
+                    // Redirect to the main application
+                    const redirectUrl = data.redirect || '/dashboard';
+                    redirectWithCountdown(redirectUrl, 2000);
+
                 } else {
-                    updateStatus(`Authentication failed: ${data.message}`, true);
+                    updateStatus(`❌ ${data.message || 'Authentication failed'}`, true);
                 }
             })
             .catch((error) => {
-                console.error('Error:', error);
-                updateStatus('Network error occurred. Please try again.', true);
+                console.error('Auth error:', error);
+                updateStatus('❌ Network error occurred. Please try again.', true);
             });
         }
 
@@ -279,13 +274,15 @@
                 try {
                     updateStatus('Triggering Google sign-in...');
                     google.accounts.id.prompt((notification) => {
+                        console.log('Prompt notification:', notification);
                         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                            updateStatus('Sign-in was cancelled or not available', true);
+                            updateStatus('Sign-in was cancelled or not available. Please try clicking the sign-in button.', true);
                         } else {
                             updateStatus('Sign-in prompted successfully');
                         }
                     });
                 } catch (error) {
+                    console.error('Manual sign-in error:', error);
                     updateStatus('Manual sign-in error: ' + error.message, true);
                 }
             } else {
@@ -295,16 +292,20 @@
 
         // Show manual button as fallback
         function showManualButton() {
-            document.getElementById('manual-signin').style.display = 'block';
-            document.getElementById('manual-signin').onclick = triggerManualSignIn;
+            const manualBtn = document.getElementById('manual-signin');
+            manualBtn.style.display = 'block';
+            manualBtn.onclick = triggerManualSignIn;
+            updateStatus('Click the manual sign-in button if the Google button doesn\'t work');
         }
 
         // Initialize Google Sign-In
         function initializeGoogleSignIn() {
             initAttempts++;
             updateStatus(`Initializing Google Sign-In (attempt ${initAttempts})...`);
+            console.log(`Initialization attempt ${initAttempts}`);
 
             if (typeof google === 'undefined') {
+                console.log('Google library not found');
                 if (initAttempts < maxAttempts) {
                     setTimeout(initializeGoogleSignIn, 2000);
                     return;
@@ -316,6 +317,7 @@
             }
 
             if (!google.accounts) {
+                console.log('Google Accounts API not ready');
                 if (initAttempts < maxAttempts) {
                     setTimeout(initializeGoogleSignIn, 2000);
                     return;
@@ -333,6 +335,7 @@
 
             try {
                 updateStatus('Configuring Google OAuth...');
+                console.log('Initializing with client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
 
                 // Initialize Google Sign-In
                 google.accounts.id.initialize({
@@ -358,64 +361,52 @@
                     });
 
                     googleInitialized = true;
-                    showSuccess('Google Sign-In ready! Click the button above to continue.');
-                    
+                    showSuccess('✅ Google Sign-In ready! Click the button above to continue.');
+
                     // Hide status after 3 seconds
                     setTimeout(() => {
                         document.getElementById('status-message').style.display = 'none';
                     }, 3000);
+
+                    console.log('Google Sign-In button rendered successfully');
                 } else {
                     updateStatus('Sign-in container not found', true);
                 }
 
             } catch (error) {
+                console.error('Initialization error:', error);
                 updateStatus('Failed to initialize Google Sign-In: ' + error.message, true);
                 showManualButton();
             }
         }
 
-        // Regular login form handler
+        // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize Google Sign-In when page loads
-            setTimeout(initializeGoogleSignIn, 500);
+            console.log('Page loaded, starting initialization...');
 
-            // Handle regular login form if shown
-            const regularForm = document.getElementById('regular-login-form');
-            if (regularForm) {
-                regularForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    
-                    const username = document.getElementById('username').value;
-                    const password = document.getElementById('password').value;
-                    
-                    updateStatus('Signing in...');
-                    
-                    fetch('/auth/login', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            username: username,
-                            password: password
-                        })
-                    })
+            // Check if user is already authenticated
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                console.log('Found existing auth token, checking status...');
+                fetch('/auth/status')
                     .then(response => response.json())
                     .then(data => {
-                        if (data.success) {
-                            showSuccess('Login successful! Redirecting...');
-                            setTimeout(() => {
-                                window.location.href = data.redirect || '/dashboard';
-                            }, 1500);
+                        if (data.authenticated) {
+                            showSuccess('Already signed in! Redirecting...');
+                            setTimeout(() => window.location.href = '/dashboard', 1500);
+                            return;
                         } else {
-                            updateStatus(data.message || 'Login failed', true);
+                            localStorage.removeItem('auth_token');
+                            localStorage.removeItem('user_data');
                         }
                     })
-                    .catch((error) => {
-                        updateStatus('Network error occurred', true);
+                    .catch(() => {
+                        // Continue with normal initialization
                     });
-                });
             }
+
+            // Initialize Google Sign-In
+            setTimeout(initializeGoogleSignIn, 1000);
         });
 
         // Global error handler
@@ -423,6 +414,14 @@
             console.error('Page error:', e.error);
             updateStatus('An error occurred. Please refresh the page.', true);
         });
+
+        // Debug function (can be called from console)
+        window.debugAuth = function() {
+            console.log('Google loaded:', typeof google !== 'undefined');
+            console.log('Google Accounts:', typeof google !== 'undefined' && google.accounts);
+            console.log('Initialized:', googleInitialized);
+            console.log('Auth token:', localStorage.getItem('auth_token'));
+        };
     </script>
 </body>
 </html>

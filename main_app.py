@@ -4,6 +4,11 @@ import dash_bootstrap_components as dbc
 from datetime import datetime, timedelta
 import pandas as pd
 import sqlite3
+import dash
+from dash import callback_context
+from flask import session as flask_session
+from datetime import datetime
+from flask import session as flask_session
 import hashlib
 import secrets
 import os
@@ -579,14 +584,18 @@ def authenticate_user(email_or_username, password):
 
 
 def validate_session_simple(token=None):
-    """Simplified session validation"""
+    """Simplified session validation with Flask session fallback"""
     try:
-        # First check Flask session
+        # Try provided token first
         if not token:
-            token = session.get('token')
+            # Try Flask session
+            token = flask_session.get('token')
 
+        # Try Dash session as last resort (you'll pass this from callback)
         if not token:
             return None
+
+        print(f"🔍 Validating token: {token[:20] if token else 'None'}...")
 
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
@@ -602,7 +611,7 @@ def validate_session_simple(token=None):
         conn.close()
 
         if user_row:
-            return {
+            user_data = {
                 'id': user_row[0],
                 'email': user_row[1],
                 'username': user_row[2],
@@ -611,7 +620,12 @@ def validate_session_simple(token=None):
                 'position': user_row[5],
                 'role': user_row[6]
             }
+            print(f"✅ Valid session for: {user_data['email']}")
+            return user_data
+
+        print("❌ Invalid or expired session")
         return None
+
     except Exception as e:
         print(f"Session validation error: {e}")
         return None
@@ -1260,15 +1274,7 @@ def create_admin_dashboard(user):
 
 
 
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True),
-     Output('login-alert', 'children', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('usc-login-btn', 'n_clicks')],
-    [State('usc-email', 'value'),
-     State('usc-name', 'value')],
-    prevent_initial_call=True
-)
+
 def handle_usc_employee_login(n_clicks, email, name):
     """Handle USC employee login"""
     if not n_clicks:
@@ -1749,16 +1755,12 @@ def get_users_content():
 
 
 # Add callbacks for user management
-@app.callback(
-    Output("user-mgmt-content", "children"),
-    [Input("user-mgmt-tabs", "active_tab")],
-    [State("session-store", "data")]
-)
+
 def update_user_mgmt_content(active_tab, session_data):
     if not session_data or 'token' not in session_data:
         return dbc.Alert("Please log in to access this page.", color="warning")
 
-    user = validate_session(session_data['token'])
+    user = validate_session_simple(session_data['token'])
     if not user:
         return dbc.Alert("Invalid session. Please log in again.", color="danger")
 
@@ -1814,14 +1816,9 @@ register_student_labour_callbacks()
 
 # ==================== CALLBACKS ====================
 
-@app.callback(
-    [Output('navbar-container', 'children'),
-     Output('page-content', 'children')],
-    [Input('url', 'pathname')],
-    [State('session-store', 'data')]
-)
+
 def display_page(pathname, session_data):
-    """Main router callback with debug logging and error handling"""
+    """Main router callback - UPDATED for new auth system"""
     try:
         print(f"🔍 DEBUG: Accessing pathname: {pathname}")
         print(f"🔍 DEBUG: Session data: {session_data}")
@@ -1830,7 +1827,7 @@ def display_page(pathname, session_data):
         user = None
 
         # Try Flask session first
-        flask_token = session.get('token')
+        flask_token = flask_session.get('token')
         if flask_token:
             user = validate_session_simple(flask_token)
             print(f"🔍 DEBUG: Flask session user: {user}")
@@ -1839,244 +1836,134 @@ def display_page(pathname, session_data):
         if not user and session_data and 'token' in session_data:
             user = validate_session_simple(session_data['token'])
             print(f"🔍 DEBUG: Dash session user: {user}")
-        else:
-            print("❌ DEBUG: No token in session data")
+
+        # Debug session info
+        print(f"🔍 DEBUG: Flask session contents: {dict(flask_session)}")
+        print(f"🔍 DEBUG: Final user: {user}")
 
         navbar = create_navbar(user)
 
-        # Public pages
-        if pathname == '/about-usc':
-            return navbar, create_about_usc_layout()
-        elif pathname == '/vision-mission-motto':
-            return navbar, create_vision_mission_motto_layout()
-        elif pathname == '/governance':
-            return navbar, create_governance_layout()
-        elif pathname == '/login':
-        # Redirect to the standalone login page served by Flask
-            return navbar, html.Div([
-                html.Script('window.location.href = "/login";')
-            ])
-        elif pathname == '/register':
-            return navbar, create_register_page()
-        elif pathname == '/request':
-            return navbar, create_request_form()
+        # Public pages (no auth required)
+        if pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
+            if pathname == '/about-usc':
+                return navbar, create_about_usc_layout()
+            elif pathname == '/vision-mission-motto':
+                return navbar, create_vision_mission_motto_layout()
+            elif pathname == '/governance':
+                return navbar, create_governance_layout()
+            elif pathname == '/request':
+                return navbar, create_request_form()
 
-        # DASHBOARD ROUTE WITH DEBUG
-        elif pathname == '/dashboard':
-            print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
+        # Login page - redirect to standalone login
+        elif pathname == '/login':
             if user:
-                print("✅ DEBUG: User authenticated, showing dashboard")
+                # Already authenticated, redirect to dashboard
+                return navbar, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-check-circle me-2"),
+                        f"Welcome back, {user['full_name']}! Redirecting to dashboard..."
+                    ], color="success"),
+                    html.Script('setTimeout(() => window.location.href = "/dashboard", 2000);')
+                ])
+            else:
+                # Not authenticated, redirect to standalone login
+                return navbar, html.Div([
+                    html.Script('window.location.href = "/login";')
+                ])
+
+        # Protected pages (require authentication)
+        elif pathname == '/dashboard' or pathname == '/':
+            if user:
+                print(f"✅ User authenticated, showing dashboard for: {user['email']}")
                 return navbar, create_dashboard()
             else:
-                print("❌ DEBUG: User not authenticated, showing login prompt")
-                return navbar, dbc.Alert([
-                    html.I(className="fas fa-lock me-2"),
-                    "Please login to access the dashboard. ",
-                    dcc.Link("Login here", href="/login")
-                ], color="warning")
-
-        # NEW: FACTBOOK ROUTES WITH ERROR HANDLING
-        elif pathname == '/factbook':
-            print(f"🔍 DEBUG: Factbook accessed, user: {user}")
-            if user and user.get('role') == 'admin':
-                print("✅ DEBUG: Admin user authenticated, showing factbook")
-                try:
-                    from pages import factbook
-                    return navbar, factbook.layout
-                except ImportError as e:
-                    print(f"❌ DEBUG: Factbook import error: {e}")
-                    return navbar, dbc.Alert([
-                        html.I(className="fas fa-exclamation-triangle me-2"),
-                        "Factbook module not found. Please ensure factbook.py is in the pages directory."
-                    ], color="danger")
-                except Exception as e:
-                    print(f"❌ DEBUG: Factbook error: {e}")
-                    traceback.print_exc()
-                    return navbar, dbc.Alert([
-                        html.I(className="fas fa-exclamation-triangle me-2"),
-                        f"Error loading factbook: {str(e)}"
-                    ], color="danger")
-            else:
-                print("❌ DEBUG: User not admin or not authenticated")
-                return navbar, dbc.Alert([
-                    html.I(className="fas fa-lock me-2"),
-                    "Admin access required to view the Factbook."
-                ], color="danger")
-
-
-        elif pathname == '/student-labour':
-
-            print(f"🔍 DEBUG: Student Labour accessed, user: {user}")
-
-            if user and user.get('role') == 'admin':
-
-                print("✅ DEBUG: Admin user authenticated, showing ultra-safe student labour report")
-
-                try:
-
-                    print("📦 Importing ultra-safe student labour module...")
-
-                    from pages import ultra_safe_student_labour
-
-
-                    print("✅ Ultra-safe module imported successfully")
-
-                    print("📊 Returning ultra-safe layout...")
-
-                    return navbar, ultra_safe_student_labour.layout
-
-                except ImportError as e:
-
-                    print(f"❌ DEBUG: Import error: {e}")
-
-                    return navbar, dbc.Container([
-
-                        dbc.Alert([
-
-                            html.H4("Import Error", className="alert-heading"),
-
-                            html.P(f"Could not import ultra_safe_student_labour module: {str(e)}"),
-
-                            html.P("Please ensure the file pages/ultra_safe_student_labour.py exists.")
-
-                        ], color="danger")
-
-                    ])
-
-                except Exception as e:
-
-                    print(f"❌ DEBUG: Unexpected error: {e}")
-
-                    import traceback
-
-                    traceback.print_exc()
-
-                    return navbar, dbc.Container([
-
-                        dbc.Alert([
-
-                            html.H4("Unexpected Error", className="alert-heading"),
-
-                            html.P(f"Error loading student labour report: {str(e)}"),
-
-                            html.P("Check the console for detailed error information.")
-
-                        ], color="danger")
-
-                    ])
-
-            else:
-
-                print("❌ DEBUG: User not admin or not authenticated")
-
-                return navbar, dbc.Alert([
-
-                    html.I(className="fas fa-lock me-2"),
-
-                    "Admin access required to view this report."
-
-                ], color="danger")
-
-
-        # ALSO add this test route to verify the fix:
-
-        elif pathname == '/test-ultra-safe':
-
-            print("🧪 Testing ultra-safe import...")
-
-            try:
-
-                from pages import ultra_safe_student_labour
-
-                return navbar, dbc.Container([
-
-                    dbc.Alert("✅ Ultra-safe module imported successfully!", color="success"),
-
-                    html.P("The module is working. Now try /student-labour")
-
+                print("❌ User not authenticated, redirecting to login")
+                return navbar, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-lock me-2"),
+                        "Please sign in to access the dashboard. ",
+                        html.A("Sign In", href="/login", className="alert-link")
+                    ], color="warning"),
+                    html.Script('setTimeout(() => window.location.href = "/login", 3000);')
                 ])
 
-            except Exception as e:
-
-                return navbar, dbc.Container([
-
-                    dbc.Alert(f"❌ Import test failed: {e}", color="danger"),
-
-                    html.P("This helps identify the exact import issue.")
-
+        # Other protected pages
+        elif pathname in ['/admin', '/factbook', '/data-management']:
+            if user:
+                if pathname == '/admin':
+                    if user['role'] == 'admin':
+                        return navbar, create_admin_dashboard()
+                    else:
+                        return navbar, dbc.Alert("Admin access required.", color="danger")
+                elif pathname == '/factbook':
+                    return navbar, create_factbook_layout()
+                elif pathname == '/data-management':
+                    return navbar, create_data_management_layout()
+            else:
+                return navbar, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-lock me-2"),
+                        "Authentication required. ",
+                        html.A("Sign In", href="/login", className="alert-link")
+                    ], color="warning"),
+                    html.Script('setTimeout(() => window.location.href = "/login", 3000);')
                 ])
 
-        elif pathname == '/test-dashboard':
-            # Test route that doesn't require authentication
-            return navbar, dbc.Container([
-                dbc.Alert("Test Dashboard - No Authentication Required", color="info"),
-                html.P("If you can see this, routing is working correctly.")
-            ])
-
-        # Protected pages - require login
-        elif pathname == '/admin':
-            if user and user['role'] == 'admin':
-                return navbar, create_admin_dashboard(user)
-            else:
-                return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
-        elif pathname == '/profile':
+        # Default route - redirect based on auth status
+        else:
             if user:
-                return navbar, create_profile_page(user)
+                print(f"✅ Default route with authenticated user, redirecting to dashboard")
+                return navbar, html.Div([
+                    html.Script('window.location.href = "/dashboard";')
+                ])
             else:
-                return navbar, dbc.Alert("Please login to view your profile.", color="warning")
-        elif pathname == '/change-password':
-            if user:
-                return navbar, create_change_password_page(user)
-            else:
-                return navbar, dbc.Alert("Please login to change password.", color="warning")
-        elif pathname == '/test-session':
-            # Test simple session storage
-            test_data = {'test': 'working', 'timestamp': str(datetime.now())}
-            return navbar, dbc.Container([
-                html.H3("Session Storage Test"),
-                html.P(f"Current session data: {session_data}"),
-                html.P("This tests if session storage is working at all."),
-                dbc.Button("Store Test Data", id="store-test-btn"),
-                html.Div(id="test-result")
-            ])
-
-        # Default to home
-        print("🔍 DEBUG: Defaulting to home page")
-        return navbar, create_home_page(user)
+                print("❌ Default route without auth, redirecting to login")
+                return navbar, html.Div([
+                    html.Script('window.location.href = "/login";')
+                ])
 
     except Exception as e:
-        print(f"❌ CRITICAL ERROR in display_page callback: {e}")
+        print(f"❌ Router error: {e}")
+        import traceback
         traceback.print_exc()
-
-        # Return a safe fallback
-        try:
-            safe_navbar = create_navbar(None)  # Create navbar with no user
-            return safe_navbar, dbc.Container([
-                dbc.Alert([
-                    html.H4("Application Error", className="alert-heading"),
-                    html.P(f"An error occurred while loading the page: {str(e)}"),
-                    html.Hr(),
-                    html.P("Please try refreshing the page or contact support.", className="mb-0")
-                ], color="danger")
-            ])
-        except Exception as navbar_error:
-            print(f"❌ CRITICAL: Even navbar creation failed: {navbar_error}")
-            # Last resort fallback
-            return html.Div("Critical Error: Please refresh page"), dbc.Alert("Critical application error",
-                                                                              color="danger")
-
-# 3. ALSO ADD a simple test route to verify your factbook files work:
-
-# Add this route for testing (you can remove it later):
+        return create_navbar(None), dbc.Alert(
+            "An error occurred. Please try refreshing the page.",
+            color="danger"
+        )
 
 
 
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True),
-     Output('test-result', 'children')],
-    [Input('store-test-btn', 'n_clicks')],
-    prevent_initial_call=True
-)
+def sync_flask_session(pathname):
+    """Sync Flask session with Dash session store"""
+    try:
+        print(f"🔍 Syncing session for pathname: {pathname}")
+
+        flask_token = flask_session.get('token')
+        user_id = flask_session.get('user_id')
+        email = flask_session.get('email')
+
+        print(f"🔍 Flask session - Token: {flask_token[:20] if flask_token else 'None'}")
+        print(f"🔍 Flask session - User ID: {user_id}")
+        print(f"🔍 Flask session - Email: {email}")
+
+        if flask_token and user_id:
+            session_data = {
+                'token': flask_token,
+                'user_id': user_id,
+                'email': email,
+                'synced': True
+            }
+            print(f"✅ Session synced: {session_data}")
+            return session_data
+
+        print("❌ No Flask session to sync")
+        return {}
+    except Exception as e:
+        print(f"Session sync error: {e}")
+        return {}
+
+
+
 def test_session_storage(n_clicks):
     if n_clicks:
         test_data = {
@@ -2089,17 +1976,13 @@ def test_session_storage(n_clicks):
 print(f"🔍 DEBUG: SECRET_KEY length: {len(SECRET_KEY)}")
 print(f"🔍 DEBUG: DATABASE path: {DATABASE}")
 print(f"🔍 DEBUG: TOKEN_EXPIRY_HOURS: {TOKEN_EXPIRY_HOURS}")
-@app.callback(
-    Output('admin-content', 'children'),
-    [Input('admin-tabs', 'active_tab')],
-    [State('session-store', 'data')]
-)
+
 def render_admin_tab(active_tab, session_data):
     """Render admin tab content"""
     if not session_data or 'token' not in session_data:
         return dbc.Alert("Session expired", color="danger")
 
-    user = validate_session(session_data['token'])
+    user = validate_session_simple(session_data['token'])
     if not user or user['role'] != 'admin':
         return dbc.Alert("Access denied", color="danger")
 
@@ -2241,18 +2124,14 @@ def render_admin_tab(active_tab, session_data):
     return html.Div()
 
 
-@app.callback(
-    Output('hidden-div', 'children'),
-    [Input({'type': 'approve-btn', 'index': dash.dependencies.ALL}, 'n_clicks'),
-     Input({'type': 'reject-btn', 'index': dash.dependencies.ALL}, 'n_clicks')],
-    [State('session-store', 'data')]
-)
+
+
 def handle_approval(approve_clicks, reject_clicks, session_data):
     """Handle user approval/rejection"""
     if not ctx.triggered:
         return ""
 
-    user = validate_session(session_data['token'])
+    user = validate_session_simple(session_data['token'])
     if not user or user['role'] != 'admin':
         return ""
 
@@ -2285,8 +2164,7 @@ def handle_approval(approve_clicks, reject_clicks, session_data):
     [Input('change-pwd-submit', 'n_clicks')],
     [State('current-password', 'value'),
      State('new-password', 'value'),
-     State('confirm-new-password', 'value'),
-     State('session-store', 'data')],
+     State('confirm-new-password', 'value')],
     prevent_initial_call=True
 )
 def handle_change_password(n_clicks, current_pwd, new_pwd, confirm_pwd, session_data):
@@ -2294,7 +2172,7 @@ def handle_change_password(n_clicks, current_pwd, new_pwd, confirm_pwd, session_
     if not n_clicks:
         return "", dash.no_update
 
-    user = validate_session(session_data['token'])
+    user = validate_session_simple(session_data['token'])
     if not user:
         return dbc.Alert("Session expired. Please login again.", color="danger"), "/login"
 
@@ -2315,19 +2193,13 @@ def handle_change_password(n_clicks, current_pwd, new_pwd, confirm_pwd, session_
         return dbc.Alert(result['message'], color="danger"), dash.no_update
 
 
-@app.callback(
-    Output('reset-result', 'children'),
-    [Input('reset-password-btn', 'n_clicks')],
-    [State('reset-user-select', 'value'),
-     State('reset-new-password', 'value'),
-     State('session-store', 'data')]
-)
+
 def handle_password_reset(n_clicks, user_id, new_password, session_data):
     """Handle password reset by admin"""
     if not n_clicks or not user_id or not new_password:
         return ""
 
-    user = validate_session(session_data['token'])
+    user = validate_session_simple(session_data['token'])
     if not user or user['role'] != 'admin':
         return dbc.Alert("Unauthorized", color="danger")
 
@@ -2348,15 +2220,7 @@ def handle_password_reset(n_clicks, user_id, new_password, session_data):
 import traceback
 
 
-@app.callback(
-    [Output('session-store', 'data'),
-     Output('login-alert', 'children'),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('login-submit', 'n_clicks')],
-    [State('login-email', 'value'),
-     State('login-password', 'value')],
-    prevent_initial_call=True
-)
+
 def handle_login(n_clicks, email_or_username, password):
     try:
         print(f"🔍 LOGIN CALLBACK: n_clicks={n_clicks}, email={email_or_username}")
@@ -2414,17 +2278,12 @@ def create_dashboard():
 
 # 5. ADD callback to show session info on dashboard:
 
-@app.callback(
-    [Output('session-debug-info', 'children'),
-     Output('session-details', 'children')],
-    [Input('url', 'pathname')],
-    [State('session-store', 'data')]
-)
+
 def update_session_debug(pathname, session_data):
     """Show session debug information"""
     if pathname == '/dashboard':
         if session_data:
-            user = validate_session(session_data.get('token')) if session_data.get('token') else None
+            user = validate_session_simple(session_data.get('token')) if session_data.get('token') else None
 
             debug_info = f"Session Token: {session_data.get('token', 'None')[:20]}..." if session_data.get(
                 'token') else "No token"
@@ -2473,17 +2332,13 @@ def handle_register(n_clicks, email, username, password, confirm, fullname, depa
         return dbc.Alert(result['message'], color="danger"), dash.no_update
 
 
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('logout-btn', 'n_clicks')],
-    [State('session-store', 'data')],
-    prevent_initial_call=True
-)
+
 def handle_logout(n_clicks, session_data):
     """Handle logout - updated for new auth system"""
     if n_clicks:
         try:
+            print("🔍 Logout initiated")
+
             # Clear Dash session
             token = session_data.get('token') if session_data else None
 
@@ -2494,9 +2349,11 @@ def handle_logout(n_clicks, session_data):
                 cursor.execute('DELETE FROM sessions WHERE token = ?', (token,))
                 conn.commit()
                 conn.close()
+                print(f"✅ Removed token from database: {token[:20]}...")
 
             # Clear Flask session
-            session.clear()
+            flask_session.clear()
+            print("✅ Cleared Flask session")
 
             return {}, "/login"
         except Exception as e:
@@ -2505,6 +2362,129 @@ def handle_logout(n_clicks, session_data):
 
     return dash.no_update, dash.no_update
 
+
+# ADD: Debug route (optional - for testing)
+@app.server.route('/debug/session')
+def debug_session():
+    """Debug endpoint to check session status"""
+    try:
+        flask_data = dict(flask_session)
+
+        # Check database session
+        token = flask_session.get('token')
+        db_status = "No token"
+
+        if token:
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT u.email, s.expires_at
+                FROM users u
+                JOIN sessions s ON u.id = s.user_id
+                WHERE s.token = ?
+            ''', (token,))
+
+            result = cursor.fetchone()
+            conn.close()
+
+            if result:
+                db_status = f"Valid for {result[0]} until {result[1]}"
+            else:
+                db_status = "Invalid/expired token"
+
+        return f"""
+        <h2>Session Debug</h2>
+        <h3>Flask Session:</h3>
+        <pre>{flask_data}</pre>
+        <h3>Database Status:</h3>
+        <pre>{db_status}</pre>
+        <p><a href="/login">Go to Login</a> | <a href="/dashboard">Go to Dashboard</a></p>
+        """
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@app.callback(
+    [Output('session-store', 'data'),
+     Output('url', 'pathname', allow_duplicate=True)],
+    [Input('url', 'pathname'),
+     Input('logout-btn', 'n_clicks')],
+    [State('session-store', 'data')],
+    prevent_initial_call=True
+)
+def handle_session_and_auth(pathname, logout_clicks, current_session_data):
+    """Combined callback to handle all session management"""
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update
+
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    try:
+        # Handle logout
+        if trigger_id == 'logout-btn' and logout_clicks:
+            print("🔍 Logout initiated")
+
+            # Clear Dash session
+            token = current_session_data.get('token') if current_session_data else None
+
+            if token:
+                # Remove from database
+                conn = sqlite3.connect(DATABASE)
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM sessions WHERE token = ?', (token,))
+                conn.commit()
+                conn.close()
+                print(f"✅ Removed token from database: {token[:20]}...")
+
+            # Clear Flask session
+            flask_session.clear()
+            print("✅ Cleared Flask session")
+
+            return {}, "/login"
+
+        # Handle session sync on URL change
+        elif trigger_id == 'url':
+            print(f"🔍 Syncing session for pathname: {pathname}")
+
+            # Try to get Flask session data
+            flask_token = flask_session.get('token')
+            user_id = flask_session.get('user_id')
+            email = flask_session.get('email')
+
+            print(f"🔍 Flask session - Token: {flask_token[:20] if flask_token else 'None'}")
+            print(f"🔍 Flask session - User ID: {user_id}")
+            print(f"🔍 Flask session - Email: {email}")
+
+            # If we have Flask session data, sync it to Dash
+            if flask_token and user_id:
+                session_data = {
+                    'token': flask_token,
+                    'user_id': user_id,
+                    'email': email,
+                    'synced': True,
+                    'timestamp': datetime.now().isoformat()
+                }
+                print(f"✅ Session synced: {session_data}")
+                return session_data, dash.no_update
+
+            # If no Flask session but we have Dash session, keep it
+            elif current_session_data and current_session_data.get('token'):
+                print(f"🔍 Keeping existing Dash session: {current_session_data.get('token', '')[:20]}...")
+                return current_session_data, dash.no_update
+
+            print("❌ No session to sync")
+            return {}, dash.no_update
+
+        return dash.no_update, dash.no_update
+
+    except Exception as e:
+        print(f"Session callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}, dash.no_update
 
 
 # Add callback for access requests table
@@ -2570,11 +2550,7 @@ def has_financial_access(user):
     return user.get('role') == 'admin'
 
 
-@app.callback(
-    Output('session-store', 'data', allow_duplicate=True),
-    [Input('url', 'pathname')],
-    prevent_initial_call=True
-)
+
 def sync_flask_session(pathname):
     """Sync Flask session with Dash session store"""
     try:
