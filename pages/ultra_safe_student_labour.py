@@ -9,17 +9,19 @@ import plotly.graph_objects as go
 import pandas as pd
 from config import USC_COLORS
 
-def load_data_directly():
-    """Load data directly from Excel file with fallback to sample data"""
+def load_data_dynamically():
+    """Load data dynamically from Excel file each time - no caching"""
     try:
-        # Try to load from data loader first
-        from data_loader import data_loader
-        print("🔄 Attempting to load from data_loader...")
+        print("🔄 Loading fresh data from Excel file...")
+        # Import and use data loader fresh each time
+        from importlib import reload
+        import data_loader
+        reload(data_loader)  # Force reload of data_loader module
 
-        raw_data = data_loader.load_student_labour_data()
+        raw_data = data_loader.data_loader.load_student_labour_data()
 
         if raw_data and 'employment' in raw_data and 'expense' in raw_data:
-            print("✅ Data loaded from data_loader successfully")
+            print("✅ Fresh data loaded successfully")
             employment_df = raw_data['employment'].copy()
             expense_df = raw_data['expense'].copy()
             monthly_expense_df = raw_data.get('monthly_expense', None)
@@ -44,15 +46,40 @@ def load_data_directly():
                             errors='coerce'
                         )
 
+            print(f"📊 Loaded employment years: {employment_df['Academic Year'].unique().tolist()}")
+            print(f"📊 Loaded expense years: {expense_df['Year'].unique().tolist()}")
+            if monthly_expense_df is not None:
+                monthly_years = [col for col in monthly_expense_df.columns if col != 'Month']
+                print(f"📊 Loaded monthly years: {monthly_years}")
+
             return employment_df, expense_df, monthly_expense_df
         else:
             print("⚠️ Data loader returned empty, using sample data")
             return get_sample_data()
 
     except Exception as e:
-        print(f"❌ Error loading from data_loader: {e}")
+        print(f"❌ Error loading fresh data: {e}")
         print("⚠️ Falling back to sample data")
         return get_sample_data()
+
+def get_fresh_filter_options():
+    """Get fresh filter options from current data"""
+    employment_df, expense_df, monthly_expense_df = load_data_dynamically()
+
+    available_employment_years = []
+    available_expense_years = []
+    available_monthly_years = []
+
+    if employment_df is not None and not employment_df.empty:
+        available_employment_years = employment_df['Academic Year'].unique().tolist()
+
+    if expense_df is not None and not expense_df.empty:
+        available_expense_years = expense_df['Year'].unique().tolist()
+
+    if monthly_expense_df is not None and not monthly_expense_df.empty:
+        available_monthly_years = [col for col in monthly_expense_df.columns if col != 'Month']
+
+    return available_employment_years, available_expense_years, available_monthly_years
 
 def get_sample_data():
     """Provide sample data based on the Excel file structure we examined"""
@@ -89,25 +116,15 @@ def get_sample_data():
     print("✅ Sample data created successfully")
     return employment_df, expense_df, monthly_expense_df
 
-# Load data immediately
-employment_df, expense_df, monthly_expense_df = load_data_directly()
-
-# Print data info for debugging
-if employment_df is not None:
-    print(f"📊 Employment data loaded: {employment_df.shape}")
-    print(f"📊 Employment data:\n{employment_df}")
-
-if expense_df is not None:
-    print(f"📊 Expense data loaded: {expense_df.shape}")
-    print(f"📊 Expense data:\n{expense_df}")
-
-if monthly_expense_df is not None:
-    print(f"📊 Monthly expense data loaded: {monthly_expense_df.shape}")
-    print(f"📊 Monthly expense data:\n{monthly_expense_df.head()}")
+# DON'T load data immediately - load fresh each time functions are called
+print("📊 Student Labour Report module initialized - data will be loaded dynamically")
 
 def create_employment_chart(view_mode='numbers', employment_type='both', selected_years=None):
-    """Create employment chart with proper filters and styling - GROUPED BY EMPLOYMENT TYPE"""
+    """Create employment chart with proper filters and styling - LOADS FRESH DATA"""
     print(f"🎨 Creating employment chart: view={view_mode}, type={employment_type}, years={selected_years}")
+
+    # Load fresh data every time
+    employment_df, _, _ = load_data_dynamically()
 
     if employment_df is None or employment_df.empty:
         print("❌ No employment data for chart")
@@ -143,6 +160,9 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
     # Create chart based on filters - GROUPED BY EMPLOYMENT TYPE
     fig = go.Figure()
 
+    # Define consistent colors matching other charts
+    colors = [USC_COLORS["primary_green"], USC_COLORS["accent_yellow"], USC_COLORS["secondary_green"]]
+
     if employment_type == 'both':
         if view_mode == 'percentage':
             print("📊 Creating percentage view for both types - grouped by employment type")
@@ -150,10 +170,6 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
             df['Total'] = df['Academic Employment'] + df['Non-Academic Employment']
             df['Academic %'] = (df['Academic Employment'] / df['Total'] * 100).round(1)
             df['Non-Academic %'] = (df['Non-Academic Employment'] / df['Total'] * 100).round(1)
-
-            # Create grouped data - Academic group and Non-Academic group
-            academic_x = ['Academic'] * len(df)
-            non_academic_x = ['Non-Academic'] * len(df)
 
             # Add traces for each year within each employment type
             for i, year in enumerate(df['Academic Year']):
@@ -164,6 +180,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=[f"{df.iloc[i]['Academic %']}%", f"{df.iloc[i]['Non-Academic %']}%"],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
 
@@ -180,6 +197,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=[str(df.iloc[i]['Academic Employment']), str(df.iloc[i]['Non-Academic Employment'])],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
 
@@ -197,6 +215,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=['100%'],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
             title = "Academic Employment (100%)"
@@ -210,6 +229,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=[str(df.iloc[i]['Academic Employment'])],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
             title = "Academic Employment Numbers"
@@ -226,6 +246,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=['100%'],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
             title = "Non-Academic Employment (100%)"
@@ -239,6 +260,7 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
                     text=[str(df.iloc[i]['Non-Academic Employment'])],
                     textposition='outside',
                     textfont=dict(color='black', size=12),
+                    marker_color=colors[i % len(colors)],  # Use consistent colors
                     showlegend=True
                 ))
             title = "Non-Academic Employment Numbers"
@@ -273,8 +295,11 @@ def create_employment_chart(view_mode='numbers', employment_type='both', selecte
     return fig
 
 def create_expense_chart(chart_type='bar', view_mode='numbers', selected_years=None):
-    """Create expense chart with proper filters and styling"""
+    """Create expense chart with proper filters and styling - LOADS FRESH DATA"""
     print(f"🎨 Creating expense chart: type={chart_type}, view={view_mode}, years={selected_years}")
+
+    # Load fresh data every time
+    _, expense_df, _ = load_data_dynamically()
 
     if expense_df is None or expense_df.empty:
         print("❌ No expense data for chart")
@@ -389,8 +414,11 @@ def create_expense_chart(chart_type='bar', view_mode='numbers', selected_years=N
     return fig
 
 def create_monthly_expense_chart(chart_type='bar', selected_years=None):
-    """Create monthly expense chart"""
+    """Create monthly expense chart - LOADS FRESH DATA"""
     print(f"🎨 Creating monthly expense chart: type={chart_type}, years={selected_years}")
+
+    # Load fresh data every time
+    _, _, monthly_expense_df = load_data_dynamically()
 
     if monthly_expense_df is None or monthly_expense_df.empty:
         print("❌ No monthly expense data for chart")
@@ -479,19 +507,27 @@ def create_monthly_expense_chart(chart_type='bar', selected_years=None):
     print("✅ Monthly expense chart created successfully")
     return fig
 
-# Get available years for dropdowns
-available_employment_years = []
-available_expense_years = []
-available_monthly_years = []
+def get_fresh_filter_options():
+    """Get fresh filter options from current data"""
+    employment_df, expense_df, monthly_expense_df = load_data_dynamically()
 
-if employment_df is not None and not employment_df.empty:
-    available_employment_years = employment_df['Academic Year'].unique().tolist()
+    available_employment_years = []
+    available_expense_years = []
+    available_monthly_years = []
 
-if expense_df is not None and not expense_df.empty:
-    available_expense_years = expense_df['Year'].unique().tolist()
+    if employment_df is not None and not employment_df.empty:
+        available_employment_years = employment_df['Academic Year'].unique().tolist()
 
-if monthly_expense_df is not None and not monthly_expense_df.empty:
-    available_monthly_years = [col for col in monthly_expense_df.columns if col != 'Month']
+    if expense_df is not None and not expense_df.empty:
+        available_expense_years = expense_df['Year'].unique().tolist()
+
+    if monthly_expense_df is not None and not monthly_expense_df.empty:
+        available_monthly_years = [col for col in monthly_expense_df.columns if col != 'Month']
+
+    return available_employment_years, available_expense_years, available_monthly_years
+
+# Get fresh filter options each time
+available_employment_years, available_expense_years, available_monthly_years = get_fresh_filter_options()
 
 print(f"📊 Available employment years: {available_employment_years}")
 print(f"📊 Available expense years: {available_expense_years}")
@@ -521,7 +557,7 @@ def create_layout():
                             html.H6([
                                 html.I(className="fas fa-filter me-2"),
                                 "Employment Filters"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             html.Label("View Mode:", className="fw-bold mb-2"),
@@ -566,7 +602,7 @@ def create_layout():
                             html.H5([
                                 html.I(className="fas fa-chart-bar me-2"),
                                 "Employment Analysis"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             dcc.Graph(
@@ -587,7 +623,7 @@ def create_layout():
                             html.H6([
                                 html.I(className="fas fa-filter me-2"),
                                 "Expense Filters"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             html.Label("Chart Type:", className="fw-bold mb-2"),
@@ -632,7 +668,7 @@ def create_layout():
                             html.H5([
                                 html.I(className="fas fa-chart-line me-2"),
                                 "Annual Expense Analysis"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             dcc.Graph(
@@ -653,7 +689,7 @@ def create_layout():
                             html.H6([
                                 html.I(className="fas fa-filter me-2"),
                                 "Monthly Filters"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             html.Label("Chart Type:", className="fw-bold mb-2"),
@@ -686,7 +722,7 @@ def create_layout():
                             html.H5([
                                 html.I(className="fas fa-calendar-alt me-2"),
                                 "Monthly Expense Analysis"
-                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})  # YELLOW TEXT
+                            ], className="mb-0", style={'color': USC_COLORS["accent_yellow"]})
                         ], style={'backgroundColor': USC_COLORS["primary_green"]}),
                         dbc.CardBody([
                             dcc.Graph(
