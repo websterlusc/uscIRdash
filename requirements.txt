@@ -24,3 +24,29 @@ python-Levenshtein==0.23.0
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
+
+# Core Dash and Flask
+dash==2.14.1
+dash-bootstrap-components==1.4.2
+flask==2.3.3
+
+# Data processing
+pandas==2.0.3
+plotly==5.15.0
+openpyxl==3.1.2
+
+# Authentication and security
+google-auth==2.23.3
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.1
+bcrypt==4.0.1
+
+# Database
+sqlite3  # Built into Python
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Optional: For improved development
+gunicorn==21.2.0  # For production deployment
