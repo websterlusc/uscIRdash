@@ -169,7 +169,7 @@ class DataLoader:
         try:
             # Try to load the most recent enrollment data
             files_to_try = [
-                "Enrollment Master Report  3110 as of May 14 2025.xlsx",
+
                 "enrolment_data.xlsx"
             ]
 
@@ -198,7 +198,7 @@ class DataLoader:
     def load_graduation_data(self):
         """Load graduation data from Excel files"""
         try:
-            data = self.load_excel_file("Graduation for May 2025.xlsx")
+            data = self.load_excel_file("GraduationData.xlsx")
             if data is not None:
                 return data
             else:

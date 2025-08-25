@@ -19,7 +19,7 @@ except ImportError:
 
 # Configuration
 DATABASE = 'usc_portal.db'
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', 'your-google-client-id-here')
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com')
 
 print(f"🔍 Google Client ID configured: {GOOGLE_CLIENT_ID[:20]}...")
 
@@ -148,7 +148,7 @@ def setup_auth_routes(app):
             with open('login.html', 'r', encoding='utf-8') as f:
                 html_content = f.read()
                 # Replace the placeholder with actual Google Client ID
-                html_content = html_content.replace('PLACEHOLDER_GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID)
+                html_content = html_content.replace('638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com', GOOGLE_CLIENT_ID)
                 return html_content
         except FileNotFoundError:
             # Fallback if login.html doesn't exist
@@ -526,4 +526,4 @@ def setup_auth_routes(app):
 
     print("✅ Auth routes configured successfully")
     print(
-        f"✅ Google Client ID: {GOOGLE_CLIENT_ID[:20]}..." if GOOGLE_CLIENT_ID != '638032897407-f73s5mnqnl5aaeavth6e37bfguhr8e1m.apps.googleusercontent.com' else "⚠️ Google Client ID not configured")
+        f"✅ Google Client ID: {GOOGLE_CLIENT_ID[:20]}..." if GOOGLE_CLIENT_ID != '890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com' else "⚠️ Google Client ID not configured")

@@ -142,7 +142,7 @@ def create_factbook_sections():
     return sections
 
 # Create layout as a function that can be called
-def get_layout():
+def create_factbook_layout():
     """Create the layout for the factbook landing page"""
     overview_cards = create_factbook_overview_cards()
     sections = create_factbook_sections()
@@ -293,4 +293,4 @@ def get_layout():
     ], fluid=True, className="py-4")
 
 # Create the layout by calling the function
-layout = get_layout()
+layout = create_factbook_layout()

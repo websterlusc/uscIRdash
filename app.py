@@ -7,7 +7,14 @@ Main Application Runner with Fixed Authentication
 import os
 import sys
 from datetime import timedelta
+import os
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Debug: Print to verify loading
+print(f"GOOGLE_CLIENT_ID loaded: {os.getenv('GOOGLE_CLIENT_ID')[:20]}..." if os.getenv('GOOGLE_CLIENT_ID') else "GOOGLE_CLIENT_ID not found")
 # Add the current directory to Python path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
