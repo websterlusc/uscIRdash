@@ -241,17 +241,6 @@
                 }
             }
 
-            if (googleInitialized) {
-                updateStatus('Google Sign-In already initialized');
-                return;
-            }
-
-            // Check if we have a valid client ID
-            if (GOOGLE_CLIENT_ID === '890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com' || !GOOGLE_CLIENT_ID) {
-                updateStatus('Google Client ID not configured. Please check your .env file.', true);
-                return;
-            }
-
             try {
                 updateStatus('Configuring Google OAuth...');
                 console.log('Initializing with client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
