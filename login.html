@@ -3,87 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>USC Institutional Research - Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>USC Institutional Research - Sign In</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Sign-In -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+
     <style>
+        :root {
+            --usc-green: #1B5E20;
+            --usc-light-green: #4CAF50;
+            --usc-yellow: #FDD835;
+        }
+
         body {
-            background: linear-gradient(135deg, #2E8B57 0%, #228B22 100%);
+            background: linear-gradient(135deg, var(--usc-green) 0%, var(--usc-light-green) 100%);
             min-height: 100vh;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .login-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-        }
-        .usc-logo {
-            max-width: 150px;
-            height: auto;
-        }
-        .status-message {
-            min-height: 30px;
-            transition: all 0.3s ease;
-        }
-        .google-signin-container {
-            min-height: 60px;
+
+        .login-container {
+            min-height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
-            border: 2px dashed #dee2e6;
-            border-radius: 10px;
-            background: #f8f9fa;
-            margin: 20px 0;
+            justify-content: center;
+            padding: 20px;
         }
-        .spinner-border-sm {
-            width: 1rem;
-            height: 1rem;
+
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            max-width: 450px;
+            width: 100%;
+        }
+
+        .card-header {
+            background: var(--usc-green);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .usc-logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--usc-green);
+            font-weight: bold;
+        }
+
+        .card-body {
+            padding: 2rem;
+        }
+
+        .status-message {
+            text-align: center;
+            margin: 1rem 0;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-loading {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .google-signin-container {
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 2rem 0;
+            padding: 1rem;
+        }
+
+        .countdown {
+            font-weight: bold;
+            color: var(--usc-green);
+        }
+
+        /* Custom Google button styling */
+        .custom-google-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .custom-google-btn:hover {
+            background: #3367d6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .custom-google-btn i {
+            margin-right: 8px;
+            font-size: 18px;
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row justify-content-center align-items-center min-vh-100">
-            <div class="col-11 col-md-6 col-lg-4">
-                <div class="card login-card border-0">
-                    <div class="card-header text-center py-4" style="background: #2E8B57; color: white; border-radius: 15px 15px 0 0;">
-                        <img src="/assets/usc-logo.png" alt="USC Logo" class="usc-logo mb-3" onerror="this.style.display='none'">
-                        <h3 class="mb-1">USC Institutional Research</h3>
-                        <p class="mb-0 opacity-75">Sign in to continue</p>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="card-header">
+                <div class="usc-logo">USC</div>
+                <h3 class="mb-0">Institutional Research</h3>
+                <p class="mb-0 mt-2 opacity-75">University of the Southern Caribbean</p>
+            </div>
+
+            <div class="card-body">
+                <!-- Status Messages -->
+                <div id="status-message" class="status-message status-loading">
+                    <i class="fas fa-spinner fa-spin me-2"></i>
+                    Initializing secure sign-in...
+                </div>
+
+                <!-- Google Sign-In Section -->
+                <div class="text-center">
+                    <h5 class="text-muted mb-3">
+                        <i class="fab fa-google me-2"></i>
+                        Sign in with Google
+                    </h5>
+
+                    <!-- Google's automatic sign-in -->
+                    <div id="g_id_onload"
+                         data-client_id="890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com"
+                         data-callback="handleCredentialResponse"
+                         data-auto_prompt="false">
                     </div>
 
-                    <div class="card-body p-4">
-                        <!-- Status Messages -->
-                        <div id="signin-status" class="status-message text-center mb-3"></div>
-
-                        <!-- Google Sign-In Button Container -->
-                        <div class="google-signin-container">
-                            <div id="google-signin-button"></div>
+                    <!-- Google sign-in button container -->
+                    <div class="google-signin-container">
+                        <div class="g_id_signin"
+                             data-type="standard"
+                             data-size="large"
+                             data-theme="filled_blue"
+                             data-text="signin_with"
+                             data-shape="rectangular"
+                             data-logo_alignment="left"
+                             data-width="320">
                         </div>
+                    </div>
 
-                        <!-- Manual Sign-In Button (fallback) -->
-                        <div class="text-center mb-3">
-                            <button id="manual-signin" class="btn btn-outline-primary" style="display: none;">
-                                <i class="fab fa-google me-2"></i>Try Manual Sign-In
-                            </button>
-                        </div>
+                    <!-- Manual trigger button (backup) -->
+                    <button id="manual-signin-btn"
+                            class="custom-google-btn"
+                            style="display: none;"
+                            onclick="triggerManualSignIn()">
+                        <i class="fab fa-google"></i>
+                        Sign in with Google
+                    </button>
+                </div>
 
-                        <!-- Instructions -->
-                        <div class="text-center">
+                <!-- Footer Links -->
+                <div class="text-center mt-4">
+                    <div class="row">
+                        <div class="col-12 mb-2">
                             <small class="text-muted">
                                 <i class="fas fa-info-circle me-1"></i>
-                                USC employees (@usc.edu.tt) are automatically approved.<br>
-                                Other users require admin approval.
+                                USC employees (@usc.edu.tt) are automatically approved
                             </small>
                         </div>
-
-                        <!-- Navigation Links -->
-                        <div class="text-center mt-4 pt-3 border-top">
-                            <a href="/" class="btn btn-link text-decoration-none">
-                                <i class="fas fa-arrow-left me-1"></i>Back to Home
-                            </a>
+                        <div class="col-12">
+                            <small class="text-muted">
+                                Need help?
+                                <a href="mailto:ir@usc.edu.tt" class="text-decoration-none" style="color: var(--usc-green);">
+                                    Contact Support
+                                </a>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -92,56 +214,65 @@
     </div>
 
     <script>
-        // This will be replaced by the Flask route with the actual client ID
-        const GOOGLE_CLIENT_ID = 'PLACEHOLDER_GOOGLE_CLIENT_ID';
-        const AUTH_ENDPOINT = '/auth/google';
+        // Configuration
+        const GOOGLE_CLIENT_ID = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com";
+        const AUTH_ENDPOINT = "/auth/google";
 
-        // State management
-        let googleInitialized = false;
-        let initAttempts = 0;
-        const maxAttempts = 5;
+        let isProcessing = false;
 
-        // Utility functions
+        // Status message functions
         function updateStatus(message, isError = false) {
-            const statusEl = document.getElementById('signin-status');
+            const statusEl = document.getElementById('status-message');
             if (statusEl) {
-                const color = isError ? 'text-danger' : 'text-primary';
-                const icon = isError ? 'fas fa-exclamation-triangle' : 'fas fa-info-circle';
-                statusEl.innerHTML = `<div class="${color}"><i class="${icon} me-2"></i>${message}</div>`;
+                statusEl.className = `status-message ${isError ? 'status-error' : 'status-loading'}`;
+                statusEl.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>${message}`;
             }
-            console.log('Google Sign-In Status:', message);
+            console.log(`Status: ${message}`);
         }
 
         function showSuccess(message) {
-            const statusEl = document.getElementById('signin-status');
+            const statusEl = document.getElementById('status-message');
             if (statusEl) {
-                statusEl.innerHTML = `<div class="text-success"><i class="fas fa-check-circle me-2"></i>${message}</div>`;
+                statusEl.className = 'status-message status-success';
+                statusEl.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
             }
+            console.log(`Success: ${message}`);
         }
 
         function showSpinner(message) {
-            const statusEl = document.getElementById('signin-status');
+            const statusEl = document.getElementById('status-message');
             if (statusEl) {
-                statusEl.innerHTML = `<div class="text-primary"><div class="spinner-border spinner-border-sm me-2"></div>${message}</div>`;
+                statusEl.className = 'status-message status-loading';
+                statusEl.innerHTML = `<div class="spinner-border spinner-border-sm me-2"></div>${message}`;
             }
         }
 
-        function redirectWithCountdown(url, delay = 2000) {
-            let countdown = Math.ceil(delay / 1000);
-            const countdownInterval = setInterval(() => {
-                updateStatus(`Redirecting in ${countdown} seconds...`);
-                countdown--;
-                if (countdown <= 0) {
-                    clearInterval(countdownInterval);
-                    window.location.href = url;
+        function redirectWithCountdown(url, delay = 3000) {
+            let count = Math.ceil(delay / 1000);
+
+            function updateCountdown() {
+                if (count > 0) {
+                    showSuccess(`Redirecting to dashboard in <span class="countdown">${count}</span> seconds...`);
+                    count--;
+                    setTimeout(updateCountdown, 1000);
+                } else {
+                    showSuccess('Redirecting now...');
+                    setTimeout(() => {
+                        window.location.href = url;
+                    }, 500);
                 }
-            }, 1000);
+            }
+
+            updateCountdown();
         }
 
         // Handle Google credential response
         async function handleCredentialResponse(response) {
+            if (isProcessing) return;
+            isProcessing = true;
+
             console.log('Google credential received, length:', response.credential.length);
-            showSpinner('Processing authentication...');
+            showSpinner('Authenticating with USC systems...');
 
             try {
                 const authResponse = await fetch(AUTH_ENDPOINT, {
@@ -154,184 +285,125 @@
                     })
                 });
 
+                if (!authResponse.ok) {
+                    throw new Error(`Server error: ${authResponse.status}`);
+                }
+
                 const data = await authResponse.json();
                 console.log('Auth response:', data);
 
                 if (data.success) {
                     showSuccess('✅ Authentication successful!');
 
-                    // Store authentication data
+                    // Store auth data
                     if (data.token) {
                         localStorage.setItem('auth_token', data.token);
-                        localStorage.setItem('user_data', JSON.stringify(data.user));
-                        console.log('Stored auth data locally');
+                        console.log('Auth token stored');
                     }
 
-                    // Redirect to dashboard or specified URL
-                    const redirectUrl = data.redirect || '/dashboard';
-                    updateStatus('Redirecting to dashboard...');
+                    if (data.user) {
+                        localStorage.setItem('user_data', JSON.stringify(data.user));
+                        console.log('User data stored');
+                    }
+
+                    // Redirect
+                    const redirectUrl = data.redirect || 'http://localhost:8050/dashboard';
                     redirectWithCountdown(redirectUrl, 2000);
 
                 } else {
                     updateStatus(`❌ ${data.message || 'Authentication failed'}`, true);
+                    isProcessing = false;
                 }
             } catch (error) {
                 console.error('Auth error:', error);
-                updateStatus('❌ Network error occurred. Please try again.', true);
+                updateStatus('❌ Network error. Please check your connection and try again.', true);
+                isProcessing = false;
             }
         }
 
         // Manual sign-in trigger (fallback)
         function triggerManualSignIn() {
             if (typeof google !== 'undefined' && google.accounts) {
+                console.log('Triggering manual sign-in');
+                updateStatus('Opening Google sign-in...');
+
                 try {
-                    updateStatus('Triggering Google sign-in...');
                     google.accounts.id.prompt((notification) => {
                         console.log('Prompt notification:', notification);
                         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                            updateStatus('Sign-in was cancelled. Please try the button again.', true);
+                            updateStatus('Sign-in cancelled. Please try again.', true);
                         }
                     });
                 } catch (error) {
                     console.error('Manual sign-in error:', error);
-                    updateStatus('Manual sign-in error: ' + error.message, true);
+                    updateStatus('Manual sign-in failed. Please refresh the page.', true);
                 }
             } else {
-                updateStatus('Google sign-in not available', true);
+                updateStatus('Google sign-in not available. Please refresh the page.', true);
             }
         }
 
-        // Show manual button as fallback
-        function showManualButton() {
-            const manualBtn = document.getElementById('manual-signin');
-            if (manualBtn) {
-                manualBtn.style.display = 'block';
-                manualBtn.onclick = triggerManualSignIn;
-                updateStatus('Click the manual sign-in button if the Google button doesn\'t work');
-            }
+        // Check Google API status and show manual button if needed
+        function checkGoogleApiStatus() {
+            setTimeout(() => {
+                if (typeof google === 'undefined') {
+                    updateStatus('Google API failed to load. Showing manual option...', true);
+                    document.getElementById('manual-signin-btn').style.display = 'inline-flex';
+                } else if (!google.accounts) {
+                    updateStatus('Google Accounts API not ready. Showing manual option...', true);
+                    document.getElementById('manual-signin-btn').style.display = 'inline-flex';
+                } else {
+                    updateStatus('✅ Google Sign-In ready! Click the button above to continue.');
+                    // Hide status after 3 seconds if successful
+                    setTimeout(() => {
+                        const statusEl = document.getElementById('status-message');
+                        if (statusEl && !statusEl.classList.contains('status-error')) {
+                            statusEl.style.display = 'none';
+                        }
+                    }, 3000);
+                }
+            }, 2000);
         }
 
-        // Initialize Google Sign-In
-        function initializeGoogleSignIn() {
-            initAttempts++;
-            updateStatus(`Initializing Google Sign-In (attempt ${initAttempts})...`);
-            console.log(`Initialization attempt ${initAttempts}`);
-
-            if (typeof google === 'undefined') {
-                console.log('Google library not found');
-                if (initAttempts < maxAttempts) {
-                    setTimeout(initializeGoogleSignIn, 2000);
-                    return;
-                } else {
-                    updateStatus('Failed to load Google Sign-In library. Please refresh the page.', true);
-                    showManualButton();
-                    return;
-                }
-            }
-
-            if (!google.accounts) {
-                console.log('Google Accounts API not ready');
-                if (initAttempts < maxAttempts) {
-                    setTimeout(initializeGoogleSignIn, 2000);
-                    return;
-                } else {
-                    updateStatus('Google Accounts API not available. Please refresh the page.', true);
-                    showManualButton();
-                    return;
-                }
-            }
-
-            try {
-                updateStatus('Configuring Google OAuth...');
-                console.log('Initializing with client ID:', GOOGLE_CLIENT_ID.substring(0, 20) + '...');
-
-                // Initialize Google Sign-In
-                google.accounts.id.initialize({
-                    client_id: GOOGLE_CLIENT_ID,
-                    callback: handleCredentialResponse,
-                    auto_select: false,
-                    cancel_on_tap_outside: false
-                });
-
-                updateStatus('Rendering sign-in button...');
-
-                const signInDiv = document.getElementById('google-signin-button');
-                if (signInDiv) {
-                    signInDiv.innerHTML = ''; // Clear any existing content
-
-                    // Render the Google Sign-In button
-                    google.accounts.id.renderButton(signInDiv, {
-                        theme: "filled_blue",
-                        size: "large",
-                        width: "320",
-                        text: "signin_with",
-                        logo_alignment: "left"
-                    });
-
-                    googleInitialized = true;
-                    showSuccess('✅ Google Sign-In ready! Click the button above to continue.');
-                    console.log('Google Sign-In button rendered successfully');
-
-                } else {
-                    updateStatus('Button container not found', true);
-                }
-
-            } catch (error) {
-                console.error('Initialization error:', error);
-                updateStatus('Initialization failed: ' + error.message, true);
-                showManualButton();
-            }
-        }
-
-        // Check if already authenticated
+        // Check for existing authentication
         function checkExistingAuth() {
             const token = localStorage.getItem('auth_token');
             if (token) {
-                updateStatus('Checking existing authentication...');
+                showSpinner('Checking existing session...');
 
-                // Validate token with server
-                fetch('/auth/validate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ token: token })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.valid) {
-                        showSuccess('Already authenticated! Redirecting...');
-                        redirectWithCountdown('/dashboard', 1500);
-                    } else {
-                        // Token invalid, clear it
-                        localStorage.removeItem('auth_token');
-                        localStorage.removeItem('user_data');
-                        initializeGoogleSignIn();
-                    }
-                })
-                .catch(error => {
-                    console.error('Auth validation error:', error);
-                    initializeGoogleSignIn();
-                });
+                // Simple redirect if token exists
+                setTimeout(() => {
+                    updateStatus('Existing session found. Redirecting...');
+                    window.location.href = 'http://localhost:8050/dashboard';
+                }, 1000);
             } else {
-                initializeGoogleSignIn();
+                checkGoogleApiStatus();
             }
         }
 
-        // Start initialization when page loads
+        // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Page loaded, starting auth check...');
+            console.log('USC IR Login page loaded');
 
-            // Small delay to ensure all resources are loaded
-            setTimeout(checkExistingAuth, 500);
+            // Check for existing auth first
+            checkExistingAuth();
         });
 
-        // Fallback: Try initialization if Google library loads later
-        window.onload = function() {
-            if (!googleInitialized) {
-                console.log('Window loaded, trying initialization...');
-                setTimeout(initializeGoogleSignIn, 1000);
-            }
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('Page error:', e.error);
+            updateStatus('An error occurred. Please refresh the page.', true);
+        });
+
+        // Debug function for console
+        window.debugLogin = function() {
+            console.log('=== DEBUG INFO ===');
+            console.log('Google loaded:', typeof google !== 'undefined');
+            console.log('Google Accounts API:', typeof google !== 'undefined' && google.accounts);
+            console.log('Client ID:', GOOGLE_CLIENT_ID);
+            console.log('Auth endpoint:', AUTH_ENDPOINT);
+            console.log('Stored token:', localStorage.getItem('auth_token') ? 'Yes' : 'No');
+            console.log('=================');
         };
     </script>
 </body>
