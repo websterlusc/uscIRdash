@@ -30,7 +30,7 @@ def check_google_dependencies():
 
 def test_google_client_id():
     """Test if the Google Client ID is valid format"""
-    client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+    client_id = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com"
 
     print("\n" + "-" * 40)
     print("GOOGLE CLIENT ID CHECK")
@@ -60,7 +60,7 @@ def test_token_verification():
 
         # Test with a dummy token (will fail, but should not crash)
         try:
-            client_id = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+            client_id = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com"
             result = id_token.verify_oauth2_token("dummy_token", requests.Request(), client_id)
             print("❌ Unexpected: dummy token was accepted")
         except ValueError as e:

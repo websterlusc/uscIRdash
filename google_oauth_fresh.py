@@ -20,7 +20,7 @@ except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
 
 # Configuration
-GOOGLE_CLIENT_ID = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com"
 USC_DOMAIN = 'usc.edu.tt'
 SECRET_KEY = 'usc-ir-secret-key-2025'  # Change this in production
 TOKEN_EXPIRY_HOURS = 8

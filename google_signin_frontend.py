@@ -6,7 +6,7 @@ from dash import html, dcc, Input, Output, State, callback_context
 import dash_bootstrap_components as dbc
 
 # Google Client Configuration
-GOOGLE_CLIENT_ID = "890006312213-jb98t4ftcjgbvalgrrbo46sl9u77e524.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com"
 
 # USC Colors (use your existing USC_COLORS)
 USC_COLORS = {
