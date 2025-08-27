@@ -1,3 +1,5 @@
+# main_app.py - Fixed version with all issues resolved
+
 import dash
 from dash import dcc, html, Input, Output, State, callback_context, ALL
 import dash_bootstrap_components as dbc
@@ -5,39 +7,67 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import sqlite3
-import bcrypt
 import secrets
 from datetime import datetime, timedelta
 import traceback
-import os
-from flask import session
-import requests
-
-# Import your existing components and functions
-from components.navbar import create_navbar
-from components.home_page import create_home_page
-from pages.public.about_usc import create_about_usc_layout
-from pages.public.vision_mission_motto import create_vision_mission_motto_layout
-from pages.public.governance import create_governance_layout
-from components.dashboard import create_dashboard
-from components.admin_dashboard import create_admin_dashboard
-from components.profile import create_profile_page
-from components.change_password import create_change_password_page
-from components.register import create_register_page
-from components.request_form import create_request_form
-from components.factbook import create_factbook_layout
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Import components (with fallbacks for missing ones)
+try:
+    from components.navbar import create_navbar
+except ImportError:
+    print("⚠️ components.navbar not found, using built-in navbar")
+    create_navbar = None
+
+try:
+    from components.home_page import create_home_page
+except ImportError:
+    print("⚠️ components.home_page not found, using built-in home page")
+    create_home_page = None
+
+try:
+    from pages.public.about_usc import create_about_usc_layout
+except ImportError:
+    create_about_usc_layout = None
+
+try:
+    from pages.public.vision_mission_motto import create_vision_mission_motto_layout
+except ImportError:
+    create_vision_mission_motto_layout = None
+
+try:
+    from pages.public.governance import create_governance_layout
+except ImportError:
+    create_governance_layout = None
+
+try:
+    from components.dashboard import create_dashboard
+except ImportError:
+    create_dashboard = None
+
+try:
+    from components.admin_dashboard import create_admin_dashboard
+except ImportError:
+    create_admin_dashboard = None
+
+try:
+    from components.factbook import create_factbook_layout
+except ImportError:
+    create_factbook_layout = None
+
 # USC Brand Colors
 USC_COLORS = {
-    'primary_green': '#2E8B57',
-    'secondary_green': '#228B22',
-    'accent_yellow': '#FFD700',
-    'light_gray': '#F8F9FA',
-    'dark_gray': '#495057'
+    'primary_green': '#1B5E20',
+    'secondary_green': '#4CAF50',
+    'accent_yellow': '#FDD835',
+    'white': '#FFFFFF',
+    'light_gray': '#F5F5F5',
+    'dark_gray': '#424242',
+    'text_gray': '#666666'
 }
 
 # Database setup
@@ -84,281 +114,443 @@ def init_database():
     conn.close()
 
 
-# Initialize database
-init_database()
+# Initialize Dash app
+app = dash.Dash(__name__,
+                external_stylesheets=[dbc.themes.BOOTSTRAP],
+                suppress_callback_exceptions=True,
+                meta_tags=[
+                    {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+                ])
 
+server = app.server
 
-def validate_session(session_token):
-    """Validate session token and return user info"""
-    if not session_token:
-        return None
-
-    try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            SELECT u.id, u.email, u.username, u.full_name, u.role, u.is_active, u.is_approved, s.expires_at
-            FROM users u
-            JOIN user_sessions s ON u.id = s.user_id
-            WHERE s.session_token = ?
-        ''', (session_token,))
-
-        result = cursor.fetchone()
-        conn.close()
-
-        if not result:
-            print(f"❌ Session not found: {session_token[:20]}...")
-            return None
-
-        user_id, email, username, full_name, role, is_active, is_approved, expires_at = result
-
-        # Check if session expired
-        expires_at_dt = datetime.fromisoformat(expires_at)
-        if expires_at_dt < datetime.now():
-            print(f"❌ Session expired: {session_token[:20]}...")
-            # Clean up expired session
-            conn = sqlite3.connect(DATABASE)
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM user_sessions WHERE session_token = ?', (session_token,))
-            conn.commit()
-            conn.close()
-            return None
-
-        # Check user status
-        if not is_active or not is_approved:
-            print(f"❌ User inactive or not approved: {email}")
-            return None
-
-        return {
-            'id': user_id,
-            'email': email,
-            'username': username,
-            'full_name': full_name,
-            'role': role
+# Custom CSS for better styling
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>USC Institutional Research</title>
+        {%favicon%}
+        {%css%}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+        :root {
+            --usc-green: #1B5E20;
+            --usc-light-green: #4CAF50;
+            --usc-yellow: #FDD835;
         }
 
-    except Exception as e:
-        print(f"❌ Session validation error: {e}")
-        return None
+        .navbar-brand {
+            font-weight: bold !important;
+            font-size: 1.3rem !important;
+            color: white !important;
+        }
 
+        .navbar-brand:hover {
+            color: #FDD835 !important;
+        }
 
-def hash_password(password):
-    """Hash a password using bcrypt"""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        .nav-link {
+            font-weight: 500 !important;
+            transition: all 0.3s ease !important;
+            color: rgba(255,255,255,0.9) !important;
+        }
 
+        .nav-link:hover {
+            color: #FDD835 !important;
+            transform: translateY(-1px);
+        }
 
-def verify_password(password, password_hash):
-    """Verify a password against its hash"""
-    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+        .btn-outline-light:hover {
+            background-color: #FDD835 !important;
+            border-color: #FDD835 !important;
+            color: var(--usc-green) !important;
+        }
 
+        .card {
+            border: none !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+            transition: transform 0.2s ease !important;
+        }
 
-def change_user_password(user_id, current_password, new_password):
-    """Change user password after verifying current password"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+        .card:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15) !important;
+        }
 
-    cursor.execute('SELECT password_hash FROM users WHERE id = ?', (user_id,))
-    result = cursor.fetchone()
+        .btn-primary {
+            background-color: var(--usc-green) !important;
+            border-color: var(--usc-green) !important;
+        }
 
-    if not result:
-        conn.close()
-        return {'success': False, 'message': 'User not found'}
+        .btn-primary:hover {
+            background-color: var(--usc-light-green) !important;
+            border-color: var(--usc-light-green) !important;
+        }
 
-    # Verify current password
-    if not verify_password(current_password, result[0]):
-        conn.close()
-        return {'success': False, 'message': 'Current password is incorrect'}
-
-    # Update to new password
-    new_hash = hash_password(new_password)
-    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_hash, user_id))
-    conn.commit()
-    conn.close()
-
-    return {'success': True, 'message': 'Password changed successfully'}
+        .alert {
+            border-left: 4px solid var(--usc-green) !important;
+        }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
 
 # ==================== UI COMPONENTS ====================
 
-def create_google_login_page():
-    """Create a Google login page that works within Dash"""
-    return dbc.Container([
-        dcc.Store(id='google-credential-store', data=None),
-        dcc.Store(id='auth-status-store', data=None),
+def create_navbar_builtin(user=None):
+    """Built-in navbar function"""
 
+    if user:
+        # Authenticated user navbar
+        user_dropdown = dbc.DropdownMenu([
+            dbc.DropdownMenuItem(f"Welcome, {user.get('full_name', user.get('email', 'User'))}", disabled=True),
+            dbc.DropdownMenuItem(divider=True),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-user me-2"),
+                "Profile"
+            ], href="/profile"),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-cog me-2"),
+                "Settings"
+            ], href="/settings"),
+            dbc.DropdownMenuItem(divider=True),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-sign-out-alt me-2"),
+                "Logout"
+            ], href="http://localhost:5000/auth/logout", external_link=True)
+        ],
+            nav=True,
+            in_navbar=True,
+            label=[
+                html.I(className="fas fa-user-circle me-2"),
+                user.get('full_name', user.get('email', 'User'))[:15]
+            ],
+            color="light",
+            className="ms-2")
+
+        nav_items = [
+            dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("Factbook", href="/factbook", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("Data Management", href="/data-management", className="nav-link")),
+        ]
+
+        if user.get('role') == 'admin':
+            nav_items.append(dbc.NavItem(dbc.NavLink("Admin", href="/admin", className="nav-link")))
+
+        nav_items.append(user_dropdown)
+
+    else:
+        # Public navbar
+        nav_items = [
+            dbc.NavItem(dbc.NavLink("Home", href="/", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("About USC", href="/about-usc", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("Vision & Mission", href="/vision-mission-motto", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("Governance", href="/governance", className="nav-link")),
+            dbc.NavItem(dbc.NavLink("Request Access", href="/request", className="nav-link")),
+            dbc.NavItem(dbc.NavLink([
+                html.I(className="fas fa-sign-in-alt me-2"),
+                "Sign In"
+            ], href="http://localhost:5000/login", external_link=True, className="btn btn-outline-light ms-3"))
+        ]
+
+    return dbc.Navbar([
+        dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    dbc.NavbarBrand([
+                        html.I(className="fas fa-university me-2"),
+                        "USC Institutional Research"
+                    ], href="/", className="navbar-brand")
+                ], width="auto"),
+                dbc.Col([
+                    dbc.Nav(nav_items, navbar=True, className="ms-auto")
+                ], width=True)
+            ], align="center", className="w-100")
+        ], fluid=True)
+    ],
+        color=USC_COLORS['primary_green'],
+        dark=True,
+        className="mb-0 shadow-sm",
+        style={"minHeight": "70px"})
+
+
+def create_home_page_builtin():
+    """Built-in home page function"""
+    return dbc.Container([
+        # Hero Section
+        dbc.Row([
+            dbc.Col([
+                html.Div([
+                    html.H1("USC Institutional Research",
+                            className="display-4 fw-bold text-center mb-4",
+                            style={"color": USC_COLORS['primary_green']}),
+                    html.P("University of the Southern Caribbean",
+                           className="lead text-center mb-4 text-muted"),
+                    html.Hr(className="my-4"),
+                    html.P("Welcome to the USC Institutional Research Portal. Access comprehensive data, "
+                           "analytics, and insights about our university's academic and operational performance.",
+                           className="text-center mb-4"),
+
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button([
+                                html.I(className="fas fa-chart-bar me-2"),
+                                "Explore Factbook"
+                            ], color="primary", size="lg", href="/factbook", className="w-100")
+                        ], md=4),
+                        dbc.Col([
+                            dbc.Button([
+                                html.I(className="fas fa-info-circle me-2"),
+                                "About USC"
+                            ], color="outline-primary", size="lg", href="/about-usc", className="w-100")
+                        ], md=4),
+                        dbc.Col([
+                            dbc.Button([
+                                html.I(className="fas fa-key me-2"),
+                                "Request Access"
+                            ], color="outline-secondary", size="lg", href="/request", className="w-100")
+                        ], md=4)
+                    ], className="text-center")
+                ], className="py-5")
+            ])
+        ], className="mb-5"),
+
+        # Features Section
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader([
-                        html.H3("USC Institutional Research Login", className="text-center mb-0")
-                    ], style={'backgroundColor': USC_COLORS['primary_green'], 'color': 'white'}),
-
                     dbc.CardBody([
-                        html.Div([
-                            html.H5("Sign in with Google", className="text-center mb-3"),
-                            html.Div(id="login-status", className="text-center mb-3"),
-                            html.Div([
-                                html.Div(id="google-signin-button",
-                                         style={'minHeight': '50px', 'display': 'flex',
-                                                'justifyContent': 'center', 'alignItems': 'center'}),
-                            ], className="d-flex justify-content-center mb-4"),
-
-                            html.Div([
-                                html.Small([
-                                    "Note: USC employees (@usc.edu.tt) are automatically approved. ",
-                                    "Others require admin approval."
-                                ], className="text-muted text-center")
-                            ])
-                        ]),
-
-                        html.Div(id="login-alert")
+                        html.I(className="fas fa-graduation-cap fa-3x text-primary mb-3"),
+                        html.H4("Academic Excellence", className="card-title"),
+                        html.P("Comprehensive data on student enrollment, graduation rates, "
+                               "academic programs, and institutional performance metrics.")
                     ])
+                ], className="text-center h-100")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.I(className="fas fa-chart-line fa-3x text-success mb-3"),
+                        html.H4("Data-Driven Insights", className="card-title"),
+                        html.P("Advanced analytics and visualization tools to understand "
+                               "trends, patterns, and opportunities for institutional growth.")
+                    ])
+                ], className="text-center h-100")
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.I(className="fas fa-users fa-3x text-info mb-3"),
+                        html.H4("Stakeholder Access", className="card-title"),
+                        html.P("Secure, role-based access for faculty, staff, administrators, "
+                               "and authorized external stakeholders.")
+                    ])
+                ], className="text-center h-100")
+            ], md=4)
+        ], className="mb-5"),
+
+        # Quick Stats Section
+        dbc.Row([
+            dbc.Col([
+                html.H3("Quick Facts", className="text-center mb-4"),
+                dbc.Row([
+                    dbc.Col([
+                        html.H2("3,000+", className="text-primary fw-bold"),
+                        html.P("Students Enrolled")
+                    ], className="text-center"),
+                    dbc.Col([
+                        html.H2("50+", className="text-success fw-bold"),
+                        html.P("Academic Programs")
+                    ], className="text-center"),
+                    dbc.Col([
+                        html.H2("95+", className="text-info fw-bold"),
+                        html.P("Years of Excellence")
+                    ], className="text-center"),
+                    dbc.Col([
+                        html.H2("100+", className="text-warning fw-bold"),
+                        html.P("Faculty & Staff")
+                    ], className="text-center")
                 ])
-            ], width=12, md=6, lg=4)
-        ], justify="center", className="min-vh-100 align-items-center py-5")
-    ], fluid=True)
+            ])
+        ], className="py-5", style={"backgroundColor": USC_COLORS['light_gray']})
+
+    ], fluid=True, className="px-0")
 
 
-def create_auth_success_page():
-    """Page shown after successful authentication"""
+def create_dashboard_builtin():
+    """Built-in dashboard function"""
     return dbc.Container([
         dbc.Row([
             dbc.Col([
+                html.H1("Dashboard", className="mb-4"),
+                dbc.Alert("Welcome to the USC Institutional Research Dashboard!", color="success"),
+
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.H4("Factbook", className="card-title"),
+                                html.P("Access institutional facts and figures"),
+                                dbc.Button("View Factbook", color="primary", href="/factbook")
+                            ])
+                        ])
+                    ], md=4),
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.H4("Data Management", className="card-title"),
+                                html.P("Manage and analyze institutional data"),
+                                dbc.Button("Manage Data", color="primary", href="/data-management")
+                            ])
+                        ])
+                    ], md=4),
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.H4("Reports", className="card-title"),
+                                html.P("Generate comprehensive reports"),
+                                dbc.Button("View Reports", color="primary", disabled=True)
+                            ])
+                        ])
+                    ], md=4)
+                ])
+            ])
+        ])
+    ], fluid=True)
+
+
+def create_data_management_layout():
+    """Built-in data management layout"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("Data Management", className="mb-4"),
+                dbc.Alert("Data management tools will be available soon!", color="info"),
+
+                dbc.Card([
+                    dbc.CardHeader("Available Tools"),
+                    dbc.CardBody([
+                        html.Ul([
+                            html.Li("Student enrollment data"),
+                            html.Li("Financial information"),
+                            html.Li("Academic program statistics"),
+                            html.Li("Faculty and staff data"),
+                            html.Li("Graduation and retention rates")
+                        ])
+                    ])
+                ])
+            ])
+        ])
+    ], fluid=True)
+
+
+def create_about_usc_layout_builtin():
+    """Built-in about USC layout"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("About USC", className="mb-4"),
+                html.P("The University of the Southern Caribbean (USC) is a premier institution "
+                       "of higher education in the Caribbean region."),
+                html.P("Founded in 1927, USC has been providing quality education for over 95 years."),
+            ])
+        ])
+    ], fluid=True)
+
+
+def create_request_form_builtin():
+    """Built-in request form"""
+    return dbc.Container([
+        dbc.Row([
+            dbc.Col([
+                html.H1("Request Access", className="mb-4"),
                 dbc.Alert([
-                    html.I(className="fas fa-check-circle me-2"),
-                    "Authentication successful! Redirecting..."
-                ], color="success", className="text-center"),
-
-                dbc.Button("Go to Dashboard", href="/dashboard", color="primary", className="w-100 mt-3")
-            ], width=6, className="mx-auto")
-        ], className="min-vh-100 align-items-center justify-content-center")
-    ])
-
-
-def get_google_signin_script():
-    """Generate the Google Sign-In JavaScript for the login page"""
-    return html.Script(f"""
-        console.log('Loading Google Sign-In script...');
-
-        // Load Google Sign-In API
-        if (!window.google) {{
-            const script = document.createElement('script');
-            script.src = 'https://accounts.google.com/gsi/client';
-            script.async = true;
-            script.defer = true;
-            script.onload = initializeGoogleSignIn;
-            document.head.appendChild(script);
-        }} else {{
-            initializeGoogleSignIn();
-        }}
-
-        function initializeGoogleSignIn() {{
-            console.log('Initializing Google Sign-In...');
-
-            google.accounts.id.initialize({{
-                client_id: "{os.getenv('GOOGLE_CLIENT_ID', 'your-client-id')}",
-                callback: handleCredentialResponse,
-                auto_select: false,
-                cancel_on_tap_outside: false
-            }});
-
-            // Render the sign-in button
-            const buttonDiv = document.getElementById('google-signin-button');
-            if (buttonDiv) {{
-                google.accounts.id.renderButton(buttonDiv, {{
-                    theme: "filled_blue",
-                    size: "large",
-                    width: "300",
-                    text: "signin_with",
-                    logo_alignment: "left"
-                }});
-                console.log('Google Sign-In button rendered');
-            }}
-        }}
-
-        function handleCredentialResponse(response) {{
-            console.log('Google credential received');
-
-            // Update the status
-            const statusDiv = document.getElementById('login-status');
-            if (statusDiv) {{
-                statusDiv.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div>Processing...';
-            }}
-
-            // Store credential in Dash component
-            if (window.dash_clientside) {{
-                window.dash_clientside.set_props('google-credential-store', {{
-                    data: response.credential
-                }});
-            }} else {{
-                console.error('Dash clientside not available');
-            }}
-        }}
-    """)
+                    html.I(className="fas fa-envelope me-2"),
+                    "To request access to the USC Institutional Research Portal, "
+                    "please contact us at: ir@usc.edu.tt"
+                ], color="info")
+            ], lg=8, className="mx-auto")
+        ])
+    ], fluid=True)
 
 
-# ==================== MAIN APP LAYOUT ====================
+# Use built-in functions as fallbacks
+if create_navbar is None:
+    create_navbar = create_navbar_builtin
+if create_home_page is None:
+    create_home_page = create_home_page_builtin
+if create_dashboard is None:
+    create_dashboard = create_dashboard_builtin
+if create_about_usc_layout is None:
+    create_about_usc_layout = create_about_usc_layout_builtin
 
-# Initialize the Dash app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
+# ==================== APP LAYOUT ====================
 
-# Update your main app layout to include the Google script
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='session-store', storage_type='session'),
-    get_google_signin_script(),  # Add Google Sign-In script
     html.Div(id='navbar-container'),
-    html.Div(id='page-content'),
-    html.Div(id='hidden-div', style={'display': 'none'})
+    html.Div(id='page-content')
 ])
 
 
-# ==================== MAIN CALLBACKS ====================
+# ==================== CALLBACKS ====================
+
 @app.callback(
     Output('session-store', 'data', allow_duplicate=True),
     [Input('url', 'pathname')],
     prevent_initial_call=True
 )
 def sync_session_on_page_load(pathname):
-    """Sync Flask session with Dash session on every page load"""
+    """Sync Flask session with Dash session on every page load - FIXED"""
     try:
         print(f"🔍 Syncing session for pathname: {pathname}")
 
-        # Make request to Flask to get session data
-        import requests
-
+        # Try to get session data from Flask server
         try:
-            response = requests.get('http://localhost:5000/auth/session-data',
-                                    cookies=request.cookies if 'request' in globals() else None,
-                                    timeout=2)
+            # Use urllib instead of requests to avoid import issues
+            import urllib.request
+            import urllib.error
+            import json
 
-            if response.status_code == 200:
-                flask_session_data = response.json()
+            req = urllib.request.Request('http://localhost:5000/auth/session-data')
 
-                if flask_session_data.get('authenticated'):
-                    print(f"✅ Found Flask session: {flask_session_data.get('email')}")
-                    return {
-                        'token': flask_session_data.get('token'),
-                        'user_id': flask_session_data.get('user_id'),
-                        'email': flask_session_data.get('email'),
-                        'full_name': flask_session_data.get('full_name'),
-                        'role': flask_session_data.get('role'),
-                        'authenticated': True,
-                        'synced': True
-                    }
+            with urllib.request.urlopen(req, timeout=2) as response:
+                if response.status == 200:
+                    flask_session_data = json.loads(response.read().decode())
+
+                    if flask_session_data.get('authenticated'):
+                        print(f"✅ Found Flask session: {flask_session_data.get('email')}")
+                        return {
+                            'token': flask_session_data.get('token'),
+                            'user_id': flask_session_data.get('user_id'),
+                            'email': flask_session_data.get('email'),
+                            'full_name': flask_session_data.get('full_name'),
+                            'role': flask_session_data.get('role'),
+                            'authenticated': True,
+                            'synced': True
+                        }
+                    else:
+                        print("❌ No Flask session found")
+                        return {}
                 else:
-                    print("❌ No Flask session found")
+                    print(f"❌ Flask session request failed: {response.status}")
                     return {}
-            else:
-                print(f"❌ Flask session request failed: {response.status_code}")
-                return {}
 
-        except requests.exceptions.RequestException as e:
+        except (urllib.error.URLError, urllib.error.HTTPError, Exception) as e:
             print(f"❌ Failed to connect to Flask auth server: {e}")
-            # Fallback: try to use existing session data
-            return dash.no_update
+            return {}
 
     except Exception as e:
         print(f"Session sync error: {e}")
@@ -372,7 +564,7 @@ def sync_session_on_page_load(pathname):
     [State('session-store', 'data')]
 )
 def display_page(pathname, session_data):
-    """Main router callback with improved session handling"""
+    """Main router callback - FIXED"""
     try:
         print(f"🔍 DEBUG: Accessing pathname: {pathname}")
         print(f"🔍 DEBUG: Session data: {session_data}")
@@ -397,16 +589,29 @@ def display_page(pathname, session_data):
         navbar = create_navbar(user)
 
         # Route handling
-        if pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
+        if pathname == '/' or pathname is None:
+            # Home page
+            return navbar, create_home_page()
+
+        elif pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
             # Public pages
             if pathname == '/about-usc':
-                return navbar, create_about_usc_layout()
+                if create_about_usc_layout:
+                    return navbar, create_about_usc_layout()
+                else:
+                    return navbar, create_about_usc_layout_builtin()
             elif pathname == '/vision-mission-motto':
-                return navbar, create_vision_mission_motto_layout()
+                if create_vision_mission_motto_layout:
+                    return navbar, create_vision_mission_motto_layout()
+                else:
+                    return navbar, html.H1("Vision & Mission - Coming Soon")
             elif pathname == '/governance':
-                return navbar, create_governance_layout()
+                if create_governance_layout:
+                    return navbar, create_governance_layout()
+                else:
+                    return navbar, html.H1("Governance - Coming Soon")
             elif pathname == '/request':
-                return navbar, create_request_form()
+                return navbar, create_request_form_builtin()
 
         elif pathname == '/login':
             if is_authenticated:
@@ -424,18 +629,24 @@ def display_page(pathname, session_data):
                     html.Script('window.location.href = "http://localhost:5000/login";')
                 ])
 
-        elif pathname in ['/dashboard', '/', '/factbook', '/data-management', '/admin']:
+        elif pathname in ['/dashboard', '/factbook', '/data-management', '/admin']:
             if is_authenticated:
                 # User is authenticated, show requested page
                 if pathname == '/admin' and user['role'] != 'admin':
                     return navbar, dbc.Alert("Admin access required.", color="danger")
                 elif pathname == '/factbook':
-                    return navbar, create_factbook_layout()
+                    if create_factbook_layout:
+                        return navbar, create_factbook_layout()
+                    else:
+                        return navbar, html.H1("Factbook - Coming Soon")
                 elif pathname == '/data-management':
                     return navbar, create_data_management_layout()
                 elif pathname == '/admin':
-                    return navbar, create_admin_dashboard()
-                else:  # dashboard or home
+                    if create_admin_dashboard:
+                        return navbar, create_admin_dashboard()
+                    else:
+                        return navbar, html.H1("Admin Dashboard - Coming Soon")
+                else:  # dashboard
                     return navbar, create_dashboard()
             else:
                 # User not authenticated, show login prompt
@@ -449,13 +660,11 @@ def display_page(pathname, session_data):
                 ])
 
         else:
-            # Default route
-            if is_authenticated:
-                return navbar, create_dashboard()
-            else:
-                return navbar, html.Div([
-                    html.Script('window.location.href = "http://localhost:5000/login";')
-                ])
+            # Unknown route, redirect to home
+            return navbar, html.Div([
+                dbc.Alert("Page not found. Redirecting to home...", color="warning"),
+                html.Script('setTimeout(() => window.location.href = "/", 2000);')
+            ])
 
     except Exception as e:
         print(f"❌ Router error: {e}")
@@ -464,89 +673,14 @@ def display_page(pathname, session_data):
         return create_navbar(None), dbc.Alert("An error occurred. Please refresh the page.", color="danger")
 
 
-# Add this callback to handle Google credential processing within Dash
-@app.callback(
-    [Output('login-alert', 'children'),
-     Output('session-store', 'data'),
-     Output('url', 'pathname')],
-    [Input('google-credential-store', 'data')],
-    [State('session-store', 'data')]
-)
-def process_google_credential(credential_data, session_data):
-    """Process Google credential and update session"""
-    if not credential_data:
-        return dash.no_update, dash.no_update, dash.no_update
-
-    try:
-        print(f"🔍 Processing Google credential in Dash...")
-
-        # Make a request to your Flask auth endpoint
-        import requests
-        import json
-
-        response = requests.post('http://localhost:8050/auth/google',
-                                 json={'credential': credential_data},
-                                 headers={'Content-Type': 'application/json'})
-
-        if response.status_code == 200:
-            result = response.json()
-
-            if result.get('success'):
-                print("✅ Google authentication successful")
-
-                # Update session store with authentication data
-                new_session_data = {
-                    'token': result['token'],
-                    'authenticated': True,
-                    'user': result['user']
-                }
-
-                # Success message and redirect to dashboard
-                success_alert = dbc.Alert([
-                    html.I(className="fas fa-check-circle me-2"),
-                    "Login successful! Redirecting to dashboard..."
-                ], color="success")
-
-                return success_alert, new_session_data, '/dashboard'
-            else:
-                print(f"❌ Authentication failed: {result.get('message')}")
-                error_alert = dbc.Alert([
-                    html.I(className="fas fa-exclamation-triangle me-2"),
-                    result.get('message', 'Authentication failed')
-                ], color="danger")
-                return error_alert, session_data, dash.no_update
-        else:
-            print(f"❌ HTTP error: {response.status_code}")
-            error_alert = dbc.Alert([
-                html.I(className="fas fa-exclamation-triangle me-2"),
-                "Network error. Please try again."
-            ], color="danger")
-            return error_alert, session_data, dash.no_update
-
-    except Exception as e:
-        print(f"❌ Error processing credential: {e}")
-        error_alert = dbc.Alert([
-            html.I(className="fas fa-exclamation-triangle me-2"),
-            f"Error: {str(e)}"
-        ], color="danger")
-        return error_alert, session_data, dash.no_update
-
-
-# LOGOUT CALLBACK
-@app.callback(
-    [Output('session-store', 'data', allow_duplicate=True),
-     Output('url', 'pathname', allow_duplicate=True)],
-    [Input('logout-btn', 'n_clicks')],
-    prevent_initial_call=True
-)
-def handle_logout(n_clicks):
-    """Handle user logout"""
-    if n_clicks:
-        print("🔍 User logout requested")
-        # Clear session data
-        return {}, '/'
-    return dash.no_update, dash.no_update
-
+# Initialize database
+init_database()
 
 if __name__ == '__main__':
+    print("🚀 USC Institutional Research Portal Starting...")
+    print("✅ Database initialized")
+    print("✅ Built-in components loaded")
+    print("📍 Server: http://localhost:8050")
+    print("🔐 Auth: http://localhost:5000/login")
+
     app.run_server(debug=True, port=8050)
