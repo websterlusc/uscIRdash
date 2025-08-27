@@ -519,7 +519,6 @@ def sync_session_on_page_load(pathname):
 
         # Try to get session data from Flask server
         try:
-            # Use urllib instead of requests to avoid import issues
             import urllib.request
             import urllib.error
             import json
@@ -532,6 +531,7 @@ def sync_session_on_page_load(pathname):
 
                     if flask_session_data.get('authenticated'):
                         print(f"✅ Found Flask session: {flask_session_data.get('email')}")
+                        # CRITICAL FIX: Return the session data to update Dash session
                         return {
                             'token': flask_session_data.get('token'),
                             'user_id': flask_session_data.get('user_id'),
@@ -557,19 +557,21 @@ def sync_session_on_page_load(pathname):
         return {}
 
 
+
 @app.callback(
     [Output('navbar-container', 'children'),
      Output('page-content', 'children')],
-    [Input('url', 'pathname')],
-    [State('session-store', 'data')]
+    [Input('url', 'pathname'),
+     Input('session-store', 'data')],  # CRITICAL: Listen to session changes too
+    prevent_initial_call=False
 )
 def display_page(pathname, session_data):
-    """Main router callback - FIXED"""
+    """Main router callback - FIXED to wait for session sync"""
     try:
         print(f"🔍 DEBUG: Accessing pathname: {pathname}")
         print(f"🔍 DEBUG: Session data: {session_data}")
 
-        # Determine if user is authenticated
+        # CRITICAL FIX: Determine if user is authenticated
         user = None
         is_authenticated = False
 
@@ -585,16 +587,14 @@ def display_page(pathname, session_data):
         else:
             print("❌ User not authenticated")
 
-        # Create navbar based on auth status
+        # CRITICAL FIX: Create navbar based on ACTUAL auth status
         navbar = create_navbar(user)
 
-        # Route handling
+        # Rest of your routing logic stays the same
         if pathname == '/' or pathname is None:
-            # Home page
             return navbar, create_home_page()
 
         elif pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
-            # Public pages
             if pathname == '/about-usc':
                 if create_about_usc_layout:
                     return navbar, create_about_usc_layout()
@@ -615,7 +615,6 @@ def display_page(pathname, session_data):
 
         elif pathname == '/login':
             if is_authenticated:
-                # Already logged in, redirect to dashboard
                 return navbar, html.Div([
                     dbc.Alert([
                         html.I(className="fas fa-check-circle me-2"),
@@ -624,14 +623,12 @@ def display_page(pathname, session_data):
                     html.Script('setTimeout(() => window.location.href = "/dashboard", 2000);')
                 ])
             else:
-                # Redirect to Flask login page
                 return navbar, html.Div([
                     html.Script('window.location.href = "http://localhost:5000/login";')
                 ])
 
         elif pathname in ['/dashboard', '/factbook', '/data-management', '/admin']:
             if is_authenticated:
-                # User is authenticated, show requested page
                 if pathname == '/admin' and user['role'] != 'admin':
                     return navbar, dbc.Alert("Admin access required.", color="danger")
                 elif pathname == '/factbook':
@@ -649,7 +646,6 @@ def display_page(pathname, session_data):
                 else:  # dashboard
                     return navbar, create_dashboard()
             else:
-                # User not authenticated, show login prompt
                 return navbar, html.Div([
                     dbc.Alert([
                         html.I(className="fas fa-lock me-2"),
@@ -660,7 +656,6 @@ def display_page(pathname, session_data):
                 ])
 
         else:
-            # Unknown route, redirect to home
             return navbar, html.Div([
                 dbc.Alert("Page not found. Redirecting to home...", color="warning"),
                 html.Script('setTimeout(() => window.location.href = "/", 2000);')
@@ -671,7 +666,6 @@ def display_page(pathname, session_data):
         import traceback
         traceback.print_exc()
         return create_navbar(None), dbc.Alert("An error occurred. Please refresh the page.", color="danger")
-
 
 # Initialize database
 init_database()
