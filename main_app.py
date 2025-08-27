@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import traceback
 import os
 from flask import session
+import requests
 
 # Import your existing components and functions
 from components.navbar import create_navbar
@@ -315,124 +316,152 @@ app.layout = html.Div([
 
 
 # ==================== MAIN CALLBACKS ====================
+@app.callback(
+    Output('session-store', 'data', allow_duplicate=True),
+    [Input('url', 'pathname')],
+    prevent_initial_call=True
+)
+def sync_session_on_page_load(pathname):
+    """Sync Flask session with Dash session on every page load"""
+    try:
+        print(f"🔍 Syncing session for pathname: {pathname}")
+
+        # Make request to Flask to get session data
+        import requests
+
+        try:
+            response = requests.get('http://localhost:5000/auth/session-data',
+                                    cookies=request.cookies if 'request' in globals() else None,
+                                    timeout=2)
+
+            if response.status_code == 200:
+                flask_session_data = response.json()
+
+                if flask_session_data.get('authenticated'):
+                    print(f"✅ Found Flask session: {flask_session_data.get('email')}")
+                    return {
+                        'token': flask_session_data.get('token'),
+                        'user_id': flask_session_data.get('user_id'),
+                        'email': flask_session_data.get('email'),
+                        'full_name': flask_session_data.get('full_name'),
+                        'role': flask_session_data.get('role'),
+                        'authenticated': True,
+                        'synced': True
+                    }
+                else:
+                    print("❌ No Flask session found")
+                    return {}
+            else:
+                print(f"❌ Flask session request failed: {response.status_code}")
+                return {}
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Failed to connect to Flask auth server: {e}")
+            # Fallback: try to use existing session data
+            return dash.no_update
+
+    except Exception as e:
+        print(f"Session sync error: {e}")
+        return {}
+
 
 @app.callback(
     [Output('navbar-container', 'children'),
      Output('page-content', 'children')],
-    [Input('url', 'pathname'),
-     Input('url', 'search')],  # Added search parameter
+    [Input('url', 'pathname')],
     [State('session-store', 'data')]
 )
-def display_page(pathname, search, session_data):
-    """Main router callback with fixed authentication flow"""
+def display_page(pathname, session_data):
+    """Main router callback with improved session handling"""
     try:
-        print(f"🔍 DEBUG: Accessing pathname: {pathname}, search: {search}")
+        print(f"🔍 DEBUG: Accessing pathname: {pathname}")
         print(f"🔍 DEBUG: Session data: {session_data}")
 
+        # Determine if user is authenticated
         user = None
-        if session_data and 'token' in session_data:
-            print("🔍 DEBUG: Token found in session, validating...")
-            user = validate_session(session_data['token'])
-            print(f"🔍 DEBUG: User validation result: {user}")
-        else:
-            print("❌ DEBUG: No token in session data")
+        is_authenticated = False
 
+        if session_data and session_data.get('authenticated') and session_data.get('token'):
+            user = {
+                'id': session_data.get('user_id'),
+                'email': session_data.get('email'),
+                'full_name': session_data.get('full_name', 'User'),
+                'role': session_data.get('role', 'user')
+            }
+            is_authenticated = True
+            print(f"✅ User authenticated: {user['email']}")
+        else:
+            print("❌ User not authenticated")
+
+        # Create navbar based on auth status
         navbar = create_navbar(user)
 
-        # Handle login flow properly
-        if pathname == '/login' or search == '?login':
-            print("🔍 DEBUG: Login page requested")
-            # Instead of redirecting, serve the login page content directly
-            return navbar, create_google_login_page()
+        # Route handling
+        if pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
+            # Public pages
+            if pathname == '/about-usc':
+                return navbar, create_about_usc_layout()
+            elif pathname == '/vision-mission-motto':
+                return navbar, create_vision_mission_motto_layout()
+            elif pathname == '/governance':
+                return navbar, create_governance_layout()
+            elif pathname == '/request':
+                return navbar, create_request_form()
 
-        # Handle authentication callback from Google
-        if pathname == '/auth-callback' or search == '?auth-success':
-            print("🔍 DEBUG: Auth callback received")
-            # This handles the return from Google OAuth
-            return navbar, create_auth_success_page()
-
-        # Public pages
-        if pathname == '/about-usc':
-            return navbar, create_about_usc_layout()
-        elif pathname == '/vision-mission-motto':
-            return navbar, create_vision_mission_motto_layout()
-        elif pathname == '/governance':
-            return navbar, create_governance_layout()
-        elif pathname == '/register':
-            return navbar, create_register_page()
-        elif pathname == '/request':
-            return navbar, create_request_form()
-
-        # Protected pages
-        elif pathname == '/dashboard':
-            print(f"🔍 DEBUG: Dashboard accessed, user: {user}")
-            if user:
-                print("✅ DEBUG: User authenticated, showing dashboard")
-                return navbar, create_dashboard()
-            else:
-                print("❌ DEBUG: User not authenticated, redirecting to login")
-                return navbar, dbc.Container([
+        elif pathname == '/login':
+            if is_authenticated:
+                # Already logged in, redirect to dashboard
+                return navbar, html.Div([
                     dbc.Alert([
-                        html.I(className="fas fa-lock me-2"),
-                        "Please login to access the dashboard. ",
-                        dbc.Button("Login Now", href="/login", color="primary", size="sm")
-                    ], color="warning")
+                        html.I(className="fas fa-check-circle me-2"),
+                        f"Welcome back, {user['full_name']}! Redirecting to dashboard..."
+                    ], color="success"),
+                    html.Script('setTimeout(() => window.location.href = "/dashboard", 2000);')
+                ])
+            else:
+                # Redirect to Flask login page
+                return navbar, html.Div([
+                    html.Script('window.location.href = "http://localhost:5000/login";')
                 ])
 
-        elif pathname == '/factbook':
-            if user and user['role'] == 'admin':
-                return navbar, create_factbook_layout()
+        elif pathname in ['/dashboard', '/', '/factbook', '/data-management', '/admin']:
+            if is_authenticated:
+                # User is authenticated, show requested page
+                if pathname == '/admin' and user['role'] != 'admin':
+                    return navbar, dbc.Alert("Admin access required.", color="danger")
+                elif pathname == '/factbook':
+                    return navbar, create_factbook_layout()
+                elif pathname == '/data-management':
+                    return navbar, create_data_management_layout()
+                elif pathname == '/admin':
+                    return navbar, create_admin_dashboard()
+                else:  # dashboard or home
+                    return navbar, create_dashboard()
             else:
-                return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
+                # User not authenticated, show login prompt
+                return navbar, html.Div([
+                    dbc.Alert([
+                        html.I(className="fas fa-lock me-2"),
+                        "Please sign in to access this page. ",
+                        html.A("Sign In", href="http://localhost:5000/login", className="alert-link")
+                    ], color="warning"),
+                    html.Script('setTimeout(() => window.location.href = "http://localhost:5000/login", 3000);')
+                ])
 
-        elif pathname == '/admin':
-            if user and user['role'] == 'admin':
-                return navbar, create_admin_dashboard(user)
+        else:
+            # Default route
+            if is_authenticated:
+                return navbar, create_dashboard()
             else:
-                return navbar, dbc.Alert("Access denied. Admin privileges required.", color="danger")
-
-        elif pathname == '/profile':
-            if user:
-                return navbar, create_profile_page(user)
-            else:
-                return navbar, dbc.Alert([
-                    "Please login to view your profile. ",
-                    dbc.Button("Login", href="/login", color="primary", size="sm")
-                ], color="warning")
-
-        elif pathname == '/change-password':
-            if user:
-                return navbar, create_change_password_page(user)
-            else:
-                return navbar, dbc.Alert([
-                    "Please login to change your password. ",
-                    dbc.Button("Login", href="/login", color="primary", size="sm")
-                ], color="warning")
-
-        # Default to home
-        print("🔍 DEBUG: Defaulting to home page")
-        return navbar, create_home_page(user)
+                return navbar, html.Div([
+                    html.Script('window.location.href = "http://localhost:5000/login";')
+                ])
 
     except Exception as e:
-        print(f"❌ CRITICAL ERROR in display_page callback: {e}")
+        print(f"❌ Router error: {e}")
         import traceback
         traceback.print_exc()
-
-        # Return a safe fallback
-        try:
-            safe_navbar = create_navbar(None)
-            return safe_navbar, dbc.Container([
-                dbc.Alert([
-                    html.H4("Application Error", className="alert-heading"),
-                    html.P(f"An error occurred: {str(e)}"),
-                    html.Hr(),
-                    html.P("Please try refreshing the page.", className="mb-0")
-                ], color="danger")
-            ])
-        except Exception as navbar_error:
-            print(f"❌ CRITICAL: Even navbar creation failed: {navbar_error}")
-            return html.Div("Critical Error: Please refresh page"), dbc.Alert("Critical application error",
-                                                                              color="danger")
+        return create_navbar(None), dbc.Alert("An error occurred. Please refresh the page.", color="danger")
 
 
 # Add this callback to handle Google credential processing within Dash

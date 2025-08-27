@@ -107,34 +107,6 @@
             font-weight: bold;
             color: var(--usc-green);
         }
-
-        /* Custom Google button styling */
-        .custom-google-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-
-        .custom-google-btn:hover {
-            background: #3367d6;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-
-        .custom-google-btn i {
-            margin-right: 8px;
-            font-size: 18px;
-        }
     </style>
 </head>
 <body>
@@ -179,15 +151,6 @@
                              data-width="320">
                         </div>
                     </div>
-
-                    <!-- Manual trigger button (backup) -->
-                    <button id="manual-signin-btn"
-                            class="custom-google-btn"
-                            style="display: none;"
-                            onclick="triggerManualSignIn()">
-                        <i class="fab fa-google"></i>
-                        Sign in with Google
-                    </button>
                 </div>
 
                 <!-- Footer Links -->
@@ -217,6 +180,7 @@
         // Configuration
         const GOOGLE_CLIENT_ID = "890006312213-3k7f200g3a94je1j9trfjru716v3kidc.apps.googleusercontent.com";
         const AUTH_ENDPOINT = "/auth/google";
+        const MAIN_APP_URL = "http://localhost:8050";
 
         let isProcessing = false;
 
@@ -247,7 +211,7 @@
             }
         }
 
-        function redirectWithCountdown(url, delay = 3000) {
+        function redirectWithCountdown(url, delay = 2000) {
             let count = Math.ceil(delay / 1000);
 
             function updateCountdown() {
@@ -257,9 +221,8 @@
                     setTimeout(updateCountdown, 1000);
                 } else {
                     showSuccess('Redirecting now...');
-                    setTimeout(() => {
-                        window.location.href = url;
-                    }, 500);
+                    // Force a full page redirect to ensure proper navigation
+                    window.top.location.href = url;
                 }
             }
 
@@ -295,20 +258,20 @@
                 if (data.success) {
                     showSuccess('✅ Authentication successful!');
 
-                    // Store auth data
-                    if (data.token) {
-                        localStorage.setItem('auth_token', data.token);
-                        console.log('Auth token stored');
+                    // Store session data in localStorage for persistence
+                    if (data.session_data) {
+                        localStorage.setItem('usc_session_data', JSON.stringify(data.session_data));
+                        console.log('Session data stored in localStorage');
                     }
 
-                    if (data.user) {
-                        localStorage.setItem('user_data', JSON.stringify(data.user));
-                        console.log('User data stored');
-                    }
+                    // Redirect to main app
+                    const redirectUrl = data.redirect || MAIN_APP_URL;
+                    console.log('Redirecting to:', redirectUrl);
 
-                    // Redirect
-                    const redirectUrl = data.redirect || 'http://localhost:8050/dashboard';
-                    redirectWithCountdown(redirectUrl, 2000);
+                    // Short delay then redirect
+                    setTimeout(() => {
+                        window.top.location.href = redirectUrl;
+                    }, 1500);
 
                 } else {
                     updateStatus(`❌ ${data.message || 'Authentication failed'}`, true);
@@ -321,37 +284,13 @@
             }
         }
 
-        // Manual sign-in trigger (fallback)
-        function triggerManualSignIn() {
-            if (typeof google !== 'undefined' && google.accounts) {
-                console.log('Triggering manual sign-in');
-                updateStatus('Opening Google sign-in...');
-
-                try {
-                    google.accounts.id.prompt((notification) => {
-                        console.log('Prompt notification:', notification);
-                        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                            updateStatus('Sign-in cancelled. Please try again.', true);
-                        }
-                    });
-                } catch (error) {
-                    console.error('Manual sign-in error:', error);
-                    updateStatus('Manual sign-in failed. Please refresh the page.', true);
-                }
-            } else {
-                updateStatus('Google sign-in not available. Please refresh the page.', true);
-            }
-        }
-
-        // Check Google API status and show manual button if needed
+        // Check Google API status
         function checkGoogleApiStatus() {
             setTimeout(() => {
                 if (typeof google === 'undefined') {
-                    updateStatus('Google API failed to load. Showing manual option...', true);
-                    document.getElementById('manual-signin-btn').style.display = 'inline-flex';
+                    updateStatus('❌ Google API failed to load. Please refresh the page.', true);
                 } else if (!google.accounts) {
-                    updateStatus('Google Accounts API not ready. Showing manual option...', true);
-                    document.getElementById('manual-signin-btn').style.display = 'inline-flex';
+                    updateStatus('❌ Google Accounts API not ready. Please refresh the page.', true);
                 } else {
                     updateStatus('✅ Google Sign-In ready! Click the button above to continue.');
                     // Hide status after 3 seconds if successful
@@ -367,23 +306,38 @@
 
         // Check for existing authentication
         function checkExistingAuth() {
-            const token = localStorage.getItem('auth_token');
-            if (token) {
-                showSpinner('Checking existing session...');
+            // Check if we have stored session data
+            const storedSession = localStorage.getItem('usc_session_data');
+            if (storedSession) {
+                try {
+                    const sessionData = JSON.parse(storedSession);
+                    if (sessionData.authenticated && sessionData.token) {
+                        showSpinner('Checking existing session...');
 
-                // Simple redirect if token exists
-                setTimeout(() => {
-                    updateStatus('Existing session found. Redirecting...');
-                    window.location.href = 'http://localhost:8050/dashboard';
-                }, 1000);
-            } else {
-                checkGoogleApiStatus();
+                        // Verify session is still valid by trying to access the main app
+                        setTimeout(() => {
+                            updateStatus('Existing session found. Redirecting...');
+                            window.top.location.href = MAIN_APP_URL;
+                        }, 1000);
+                        return;
+                    } else {
+                        // Clear invalid session data
+                        localStorage.removeItem('usc_session_data');
+                    }
+                } catch (e) {
+                    // Clear corrupted session data
+                    localStorage.removeItem('usc_session_data');
+                }
             }
+
+            // No existing session, proceed with Google API check
+            checkGoogleApiStatus();
         }
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
             console.log('USC IR Login page loaded');
+            console.log('Current URL:', window.location.href);
 
             // Check for existing auth first
             checkExistingAuth();
@@ -397,14 +351,24 @@
 
         // Debug function for console
         window.debugLogin = function() {
-            console.log('=== DEBUG INFO ===');
+            console.log('=== LOGIN DEBUG INFO ===');
             console.log('Google loaded:', typeof google !== 'undefined');
             console.log('Google Accounts API:', typeof google !== 'undefined' && google.accounts);
             console.log('Client ID:', GOOGLE_CLIENT_ID);
             console.log('Auth endpoint:', AUTH_ENDPOINT);
-            console.log('Stored token:', localStorage.getItem('auth_token') ? 'Yes' : 'No');
-            console.log('=================');
+            console.log('Main app URL:', MAIN_APP_URL);
+            console.log('Stored session:', localStorage.getItem('usc_session_data'));
+            console.log('Current URL:', window.location.href);
+            console.log('========================');
         };
+
+        // Clear any stale data on page unload
+        window.addEventListener('beforeunload', function() {
+            if (!isProcessing) {
+                // Only clear if we're not in the middle of authentication
+                console.log('Page unloading, cleaning up...');
+            }
+        });
     </script>
 </body>
 </html>

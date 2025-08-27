@@ -1,5 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
+import requests
 
 # USC Brand Colors
 USC_COLORS = {
@@ -10,84 +11,79 @@ USC_COLORS = {
     'dark_gray': '#495057'
 }
 
+
 def create_navbar(user=None):
-    """Create the main navigation bar with proper login/logout links"""
-    nav_items = [
-        dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
-        dbc.DropdownMenu([
-            dbc.DropdownMenuItem(
-                dcc.Link("Facts About USC", href="/about-usc", style={"textDecoration": "none", "color": "inherit"})),
-            dbc.DropdownMenuItem(dcc.Link("Vision, Mission & Motto", href="/vision-mission-motto",
-                                          style={"textDecoration": "none", "color": "inherit"})),
-            dbc.DropdownMenuItem(
-                dcc.Link("Governance", href="/governance", style={"textDecoration": "none", "color": "inherit"})),
-        ], nav=True, in_navbar=True, label="About USC", id="about-dropdown"),
-    ]
+    """Create navigation bar with proper logout handling"""
 
     if user:
-        # Add Dashboard for all authenticated users
-        nav_items.append(
-            dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard"))
-        )
+        # Authenticated user navbar
+        user_dropdown = dbc.DropdownMenu([
+            dbc.DropdownMenuItem(f"Welcome, {user.get('full_name', user.get('email', 'User'))}", disabled=True),
+            dbc.DropdownMenuItem(divider=True),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-user me-2"),
+                "Profile"
+            ], href="/profile"),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-cog me-2"),
+                "Settings"
+            ], href="/settings"),
+            dbc.DropdownMenuItem(divider=True),
+            dbc.DropdownMenuItem([
+                html.I(className="fas fa-sign-out-alt me-2"),
+                "Logout"
+            ], href="http://localhost:5000/auth/logout", external_link=True)  # Link to Flask logout
+        ],
+            nav=True,
+            in_navbar=True,
+            label=[
+                html.I(className="fas fa-user-circle me-2"),
+                user.get('full_name', user.get('email', 'User'))[:15]
+            ])
 
-        # Add Factbook access for admins only
+        nav_items = [
+            dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard")),
+            dbc.NavItem(dbc.NavLink("Factbook", href="/factbook")),
+            dbc.NavItem(dbc.NavLink("Data Management", href="/data-management")),
+        ]
+
         if user.get('role') == 'admin':
-            nav_items.extend([
-                dbc.NavItem(dbc.NavLink([
-                    html.I(className="fas fa-book me-2"),
-                    "Factbook"
-                ], href="/factbook", style={"color": USC_COLORS["accent_yellow"]})),
-                dbc.NavItem(dbc.NavLink("Admin", href="/admin", className="text-warning"))
-            ])
+            nav_items.append(dbc.NavItem(dbc.NavLink("Admin", href="/admin")))
 
-        # User menu with profile options
-        nav_items.append(
-            dbc.DropdownMenu(
-                children=[
-                    dbc.DropdownMenuItem(f"Signed in as: {user['full_name']}", disabled=True),
-                    dbc.DropdownMenuItem(divider=True),
-                    dbc.DropdownMenuItem("Profile", href="/profile"),
-                    dbc.DropdownMenuItem("Change Password", href="/change-password"),
-                    dbc.DropdownMenuItem(divider=True),
-                    dbc.DropdownMenuItem([
-                        html.I(className="fas fa-sign-out-alt me-2"),
-                        "Logout"
-                    ], id="logout-btn"),
-                ],
-                nav=True,
-                in_navbar=True,
-                label=[
-                    html.I(className="fas fa-user me-1"),
-                    user['username']
-                ],
-            )
-        )
+        nav_items.append(user_dropdown)
+
     else:
-        # For non-authenticated users - proper login button
-        nav_items.extend([
+        # Public navbar
+        nav_items = [
+            dbc.NavItem(dbc.NavLink("About USC", href="/about-usc")),
+            dbc.NavItem(dbc.NavLink("Vision & Mission", href="/vision-mission-motto")),
+            dbc.NavItem(dbc.NavLink("Governance", href="/governance")),
             dbc.NavItem(dbc.NavLink("Request Access", href="/request")),
-            dbc.NavItem([
-                dbc.Button([
-                    html.I(className="fas fa-sign-in-alt me-2"),
-                    "Login"
-                ],
-                    href="/login",  # This now works properly with the fixed routing
-                    color="warning",
-                    size="sm",
-                    className="ms-2",
-                    external_link=False)  # Important: keeps it within the Dash app
-            ])
-        ])
+            dbc.NavItem(dbc.NavLink([
+                html.I(className="fas fa-sign-in-alt me-2"),
+                "Sign In"
+            ], href="http://localhost:5000/login", external_link=True, className="btn btn-outline-light ms-2"))
+        ]
 
-    return dbc.NavbarSimple(
-        children=nav_items,
-        brand=create_brand_element(),
-        brand_href="/",
+    return dbc.Navbar([
+        dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    dbc.NavbarBrand([
+                        "USC Institutional Research"
+                    ], href="/")
+                ], width="auto"),
+                dbc.Col([
+                    dbc.Nav(nav_items, navbar=True, className="ms-auto")
+                ], width=True)
+            ], align="center", className="w-100")
+        ], fluid=True)
+    ],
         color=USC_COLORS['primary_green'],
         dark=True,
-        fluid=True,
-        className="mb-0 shadow-sm"
-    )
+        className="mb-4")
+
+
 
 
 def create_brand_element():
