@@ -507,17 +507,25 @@ app.layout = html.Div([
 
 # ==================== CALLBACKS ====================
 
-@app.callback(
-    Output('session-store', 'data', allow_duplicate=True),
-    [Input('url', 'pathname')],
-    prevent_initial_call=True
-)
-def sync_session_on_page_load(pathname):
-    """Sync Flask session with Dash session on every page load - FIXED"""
-    try:
-        print(f"🔍 Syncing session for pathname: {pathname}")
+# REPLACE your callbacks in main_app.py with this SINGLE COMBINED callback:
 
-        # Try to get session data from Flask server
+# REMOVE both old callbacks and replace with this ONE callback:
+@app.callback(
+    [Output('navbar-container', 'children'),
+     Output('page-content', 'children'),
+     Output('session-store', 'data')],  # No allow_duplicate needed!
+    [Input('url', 'pathname')],
+    [State('session-store', 'data')],
+    prevent_initial_call=False
+)
+def display_page_with_session_sync(pathname, session_data):
+    """COMBINED: Session sync + page routing in one callback"""
+    try:
+        print(f"🔍 COMBINED: pathname={pathname}, existing_session={session_data is not None}")
+
+        # STEP 1: Sync with Flask session
+        synced_session_data = {}
+
         try:
             import urllib.request
             import urllib.error
@@ -525,97 +533,99 @@ def sync_session_on_page_load(pathname):
 
             req = urllib.request.Request('http://localhost:5000/auth/session-data')
 
-            with urllib.request.urlopen(req, timeout=2) as response:
+            with urllib.request.urlopen(req, timeout=3) as response:
                 if response.status == 200:
                     flask_session_data = json.loads(response.read().decode())
 
-                    if flask_session_data.get('authenticated'):
-                        print(f"✅ Found Flask session: {flask_session_data.get('email')}")
-                        # CRITICAL FIX: Return the session data to update Dash session
-                        return {
+                    print(f"📡 FLASK: {flask_session_data}")
+
+                    # Strict validation - must have ALL required fields
+                    if (flask_session_data.get('authenticated') and
+                            flask_session_data.get('token') and
+                            flask_session_data.get('user_id') and
+                            flask_session_data.get('email')):
+
+                        synced_session_data = {
                             'token': flask_session_data.get('token'),
                             'user_id': flask_session_data.get('user_id'),
                             'email': flask_session_data.get('email'),
-                            'full_name': flask_session_data.get('full_name'),
-                            'role': flask_session_data.get('role'),
+                            'full_name': flask_session_data.get('full_name', flask_session_data.get('email')),
+                            'role': flask_session_data.get('role', 'user'),
                             'authenticated': True,
-                            'synced': True
+                            'synced_at': datetime.now().isoformat()
                         }
+
+                        print(f"✅ FLASK: Valid session for {synced_session_data['email']}")
                     else:
-                        print("❌ No Flask session found")
-                        return {}
+                        print("❌ FLASK: Invalid or incomplete session")
+                        synced_session_data = {'authenticated': False}
                 else:
-                    print(f"❌ Flask session request failed: {response.status}")
-                    return {}
+                    print(f"❌ FLASK: Session endpoint error: {response.status}")
+                    synced_session_data = {'authenticated': False}
 
-        except (urllib.error.URLError, urllib.error.HTTPError, Exception) as e:
-            print(f"❌ Failed to connect to Flask auth server: {e}")
-            return {}
+        except Exception as e:
+            print(f"❌ FLASK: Session sync failed: {e}")
+            synced_session_data = {'authenticated': False}
 
-    except Exception as e:
-        print(f"Session sync error: {e}")
-        return {}
+        # STEP 2: Use synced session data (or existing if sync failed)
+        final_session_data = synced_session_data if synced_session_data.get('authenticated') else (session_data or {})
 
-
-
-@app.callback(
-    [Output('navbar-container', 'children'),
-     Output('page-content', 'children')],
-    [Input('url', 'pathname'),
-     Input('session-store', 'data')],  # CRITICAL: Listen to session changes too
-    prevent_initial_call=False
-)
-def display_page(pathname, session_data):
-    """Main router callback - FIXED to wait for session sync"""
-    try:
-        print(f"🔍 DEBUG: Accessing pathname: {pathname}")
-        print(f"🔍 DEBUG: Session data: {session_data}")
-
-        # CRITICAL FIX: Determine if user is authenticated
+        # STEP 3: Determine authentication status
         user = None
         is_authenticated = False
 
-        if session_data and session_data.get('authenticated') and session_data.get('token'):
+        if (final_session_data and
+                final_session_data.get('authenticated') and
+                final_session_data.get('email')):
+
             user = {
-                'id': session_data.get('user_id'),
-                'email': session_data.get('email'),
-                'full_name': session_data.get('full_name', 'User'),
-                'role': session_data.get('role', 'user')
+                'id': final_session_data.get('user_id'),
+                'email': final_session_data.get('email'),
+                'full_name': final_session_data.get('full_name', final_session_data.get('email')),
+                'role': final_session_data.get('role', 'user')
             }
             is_authenticated = True
-            print(f"✅ User authenticated: {user['email']}")
+            print(f"✅ AUTH: User {user['email']} is authenticated")
         else:
-            print("❌ User not authenticated")
+            print("❌ AUTH: User not authenticated")
 
-        # CRITICAL FIX: Create navbar based on ACTUAL auth status
-        navbar = create_navbar(user)
+        # STEP 4: Create navbar
+        if create_navbar:
+            navbar = create_navbar(user)
+        else:
+            navbar = create_navbar_builtin(user)
 
-        # Rest of your routing logic stays the same
+        print(f"🔧 NAVBAR: Created with user={user is not None}")
+
+        # STEP 5: Route handling
         if pathname == '/' or pathname is None:
-            return navbar, create_home_page()
+            if create_home_page:
+                content = create_home_page()
+            else:
+                content = create_home_page_builtin()
 
         elif pathname in ['/about-usc', '/vision-mission-motto', '/governance', '/request']:
             if pathname == '/about-usc':
                 if create_about_usc_layout:
-                    return navbar, create_about_usc_layout()
+                    content = create_about_usc_layout()
                 else:
-                    return navbar, create_about_usc_layout_builtin()
+                    content = create_about_usc_layout_builtin()
             elif pathname == '/vision-mission-motto':
                 if create_vision_mission_motto_layout:
-                    return navbar, create_vision_mission_motto_layout()
+                    content = create_vision_mission_motto_layout()
                 else:
-                    return navbar, html.H1("Vision & Mission - Coming Soon")
+                    content = html.H1("Vision & Mission - Coming Soon")
             elif pathname == '/governance':
                 if create_governance_layout:
-                    return navbar, create_governance_layout()
+                    content = create_governance_layout()
                 else:
-                    return navbar, html.H1("Governance - Coming Soon")
+                    content = html.H1("Governance - Coming Soon")
             elif pathname == '/request':
-                return navbar, create_request_form_builtin()
+                content = create_request_form_builtin()
 
         elif pathname == '/login':
             if is_authenticated:
-                return navbar, html.Div([
+                content = html.Div([
                     dbc.Alert([
                         html.I(className="fas fa-check-circle me-2"),
                         f"Welcome back, {user['full_name']}! Redirecting to dashboard..."
@@ -623,30 +633,34 @@ def display_page(pathname, session_data):
                     html.Script('setTimeout(() => window.location.href = "/dashboard", 2000);')
                 ])
             else:
-                return navbar, html.Div([
+                content = html.Div([
                     html.Script('window.location.href = "http://localhost:5000/login";')
                 ])
 
         elif pathname in ['/dashboard', '/factbook', '/data-management', '/admin']:
             if is_authenticated:
                 if pathname == '/admin' and user['role'] != 'admin':
-                    return navbar, dbc.Alert("Admin access required.", color="danger")
+                    content = dbc.Alert("Admin access required.", color="danger")
                 elif pathname == '/factbook':
                     if create_factbook_layout:
-                        return navbar, create_factbook_layout()
+                        content = create_factbook_layout()
                     else:
-                        return navbar, html.H1("Factbook - Coming Soon")
+                        content = html.H1("Factbook - Coming Soon")
                 elif pathname == '/data-management':
-                    return navbar, create_data_management_layout()
+                    content = create_data_management_layout() if 'create_data_management_layout' in globals() else html.H1(
+                        "Data Management - Coming Soon")
                 elif pathname == '/admin':
                     if create_admin_dashboard:
-                        return navbar, create_admin_dashboard()
+                        content = create_admin_dashboard()
                     else:
-                        return navbar, html.H1("Admin Dashboard - Coming Soon")
+                        content = html.H1("Admin Dashboard - Coming Soon")
                 else:  # dashboard
-                    return navbar, create_dashboard()
+                    if create_dashboard:
+                        content = create_dashboard()
+                    else:
+                        content = html.H1("Dashboard - Coming Soon")
             else:
-                return navbar, html.Div([
+                content = html.Div([
                     dbc.Alert([
                         html.I(className="fas fa-lock me-2"),
                         "Please sign in to access this page. ",
@@ -656,18 +670,27 @@ def display_page(pathname, session_data):
                 ])
 
         else:
-            return navbar, html.Div([
+            content = html.Div([
                 dbc.Alert("Page not found. Redirecting to home...", color="warning"),
                 html.Script('setTimeout(() => window.location.href = "/", 2000);')
             ])
 
+        print(f"✅ RETURNING: navbar, content, session_data")
+        return navbar, content, synced_session_data
+
     except Exception as e:
-        print(f"❌ Router error: {e}")
+        print(f"❌ COMBINED: Error: {e}")
         import traceback
         traceback.print_exc()
-        return create_navbar(None), dbc.Alert("An error occurred. Please refresh the page.", color="danger")
 
-# Initialize database
+        # Return safe defaults
+        error_navbar = create_navbar(None) if create_navbar else create_navbar_builtin(None)
+        error_content = dbc.Alert([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            f"An error occurred: {str(e)}. Please refresh the page."
+        ], color="danger")
+
+        return error_navbar, error_content, {'authenticated': False}
 init_database()
 
 if __name__ == '__main__':
