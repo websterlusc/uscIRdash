@@ -258,20 +258,41 @@ def create_navbar(user=None):
             dbc.NavItem(dbc.NavLink("Dashboard", href="/dashboard")),
             dbc.NavItem(dbc.NavLink("Factbook", href="/factbook")),
             dbc.DropdownMenu([
-                dbc.DropdownMenuItem(f"👋 {user['full_name']}", disabled=True),
+                dbc.DropdownMenuItem(f"👋 {user['full_name']}", disabled=True, style={"font-weight": "bold"}),
                 dbc.DropdownMenuItem(divider=True),
-                dbc.DropdownMenuItem("Logout", id="logout-btn")
-            ], nav=True, in_navbar=True, label="Account", className="ms-auto")
+                dbc.DropdownMenuItem([
+                    html.I(className="fas fa-user me-2"),
+                    "Profile"
+                ], disabled=True),
+                dbc.DropdownMenuItem([
+                    html.I(className="fas fa-cog me-2"),
+                    "Settings"
+                ], disabled=True),
+                dbc.DropdownMenuItem(divider=True),
+                dbc.DropdownMenuItem([
+                    html.I(className="fas fa-sign-out-alt me-2"),
+                    "Logout"
+                ], id="logout-btn", n_clicks=0)
+            ], nav=True, in_navbar=True, label=[
+                html.I(className="fas fa-user-circle me-2"),
+                user['full_name'][:15] if len(user['full_name']) > 15 else user['full_name']
+            ], className="ms-auto")
         ]
     else:
         nav_items = [
             dbc.NavItem(dbc.NavLink("About", href="/about")),
-            dbc.NavItem(dbc.NavLink("Sign In", href="/login", className="btn btn-outline-light ms-2"))
+            dbc.NavItem(dbc.NavLink([
+                html.I(className="fas fa-sign-in-alt me-2"),
+                "Sign In"
+            ], href="/login", className="btn btn-outline-light ms-2"))
         ]
 
     return dbc.Navbar([
         dbc.Container([
-            dbc.NavbarBrand("🏛️ USC Institutional Research", href="/"),
+            dbc.NavbarBrand([
+                html.I(className="fas fa-university me-2"),
+                "USC Institutional Research"
+            ], href="/"),
             dbc.Nav(nav_items, navbar=True, className="ms-auto")
         ])
     ], color="#2E8B57", dark=True, className="mb-4")
@@ -370,6 +391,16 @@ def handle_login_status(search, n_clicks, email):
             return dbc.Alert("Google authentication is not available. Please contact support.", color="danger")
         elif 'error=no_code' in search:
             return dbc.Alert("Google authentication was cancelled.", color="warning")
+        elif 'error=no_client_secret' in search:
+            return dbc.Alert("Google Client Secret not configured. Please contact administrator.", color="danger")
+        elif 'error=token_exchange_failed' in search:
+            return dbc.Alert("Failed to exchange authorization code. Please try again.", color="danger")
+        elif 'error=no_access_token' in search:
+            return dbc.Alert("Failed to get access token from Google. Please try again.", color="danger")
+        elif 'error=userinfo_failed' in search:
+            return dbc.Alert("Failed to get user information from Google. Please try again.", color="danger")
+        elif 'error=callback_exception' in search:
+            return dbc.Alert("An error occurred during authentication. Please try again.", color="danger")
         elif 'error=token_failed' in search:
             return dbc.Alert("Google authentication failed. Please try again.", color="danger")
         elif 'error=no_email' in search:
@@ -430,44 +461,82 @@ def google_callback():
         return redirect('/login?error=google_unavailable')
 
     code = request.args.get('code')
+    error = request.args.get('error')
+
+    if error:
+        print(f"❌ Google OAuth error: {error}")
+        return redirect(f'/login?error=google_error_{error}')
+
     if not code:
+        print("❌ No authorization code received from Google")
         return redirect('/login?error=no_code')
 
     try:
-        # Exchange code for token
+        print(f"🔍 Received authorization code: {code[:20]}...")
+
+        # Check if we have the client secret
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        if not client_secret:
+            print("❌ GOOGLE_CLIENT_SECRET not found in environment")
+            return redirect('/login?error=no_client_secret')
+
+        # Exchange code for token using requests
         import requests as req
 
         token_data = {
             'client_id': GOOGLE_CLIENT_ID,
-            'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+            'client_secret': client_secret,
             'code': code,
             'grant_type': 'authorization_code',
             'redirect_uri': 'http://localhost:8050/auth/google-callback'
         }
 
+        print("🔍 Exchanging code for token...")
         token_response = req.post('https://oauth2.googleapis.com/token', data=token_data)
+
+        print(f"🔍 Token response status: {token_response.status_code}")
+
+        if token_response.status_code != 200:
+            print(f"❌ Token exchange failed: {token_response.text}")
+            return redirect('/login?error=token_exchange_failed')
+
         token_json = token_response.json()
 
         if 'access_token' not in token_json:
-            return redirect('/login?error=token_failed')
+            print(f"❌ No access token in response: {token_json}")
+            return redirect('/login?error=no_access_token')
+
+        access_token = token_json['access_token']
+        print(f"✅ Got access token: {access_token[:20]}...")
 
         # Get user info
+        print("🔍 Getting user info from Google...")
         user_response = req.get(
-            f"https://www.googleapis.com/oauth2/v1/userinfo?access_token={token_json['access_token']}"
+            f"https://www.googleapis.com/oauth2/v2/userinfo?access_token={access_token}"
         )
+
+        if user_response.status_code != 200:
+            print(f"❌ User info request failed: {user_response.text}")
+            return redirect('/login?error=userinfo_failed')
+
         user_info = user_response.json()
+        print(f"✅ Got user info: {user_info}")
 
         email = user_info.get('email')
         name = user_info.get('name', email)
         google_id = user_info.get('id')
 
         if not email:
+            print("❌ No email in user info")
             return redirect('/login?error=no_email')
+
+        print(f"✅ User: {name} ({email})")
 
         # Create or get user
         user_id, role = create_or_get_user(email, name, google_id)
 
         if not user_id:
+            print(f"❌ User creation failed for {email}")
             return redirect('/login?error=user_creation_failed')
 
         # Create Flask session
@@ -478,11 +547,14 @@ def google_callback():
         session['full_name'] = name
         session['role'] = role
 
+        print(f"✅ Session created for {email}")
         return redirect('/')
 
     except Exception as e:
-        print(f"Google OAuth error: {e}")
-        return redirect('/login?error=oauth_failed')
+        print(f"❌ Google OAuth callback error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('/login?error=callback_exception')
 
 
 @app.callback(
