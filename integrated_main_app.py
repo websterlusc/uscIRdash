@@ -17,6 +17,7 @@ load_dotenv()
 try:
     from google.auth.transport import requests as google_requests
     from google.oauth2 import id_token
+
     GOOGLE_AUTH_AVAILABLE = True
 except ImportError:
     print("⚠️ Google Auth not available")
@@ -35,13 +36,14 @@ server.permanent_session_lifetime = timedelta(days=7)
 app = dash.Dash(__name__, server=server, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "USC Institutional Research"
 
+
 # ==================== DATABASE SETUP ====================
 
 def init_database():
     """Initialize database"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +56,7 @@ def init_database():
             last_login TIMESTAMP
         )
     ''')
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,9 +67,10 @@ def init_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+
     conn.commit()
     conn.close()
+
 
 # ==================== AUTHENTICATION FUNCTIONS ====================
 
@@ -75,7 +78,7 @@ def get_current_user():
     """Get current authenticated user from Flask session"""
     if not session.get('authenticated'):
         return None
-    
+
     return {
         'id': session.get('user_id'),
         'email': session.get('email'),
@@ -83,26 +86,27 @@ def get_current_user():
         'role': session.get('role', 'user')
     }
 
+
 def create_or_get_user(email, full_name, google_id):
     """Create or get user from database"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
-    
+
     # Check if user exists
     cursor.execute('SELECT id, role, is_active FROM users WHERE email = ?', (email,))
     result = cursor.fetchone()
-    
+
     if result:
         user_id, role, is_active = result
         if not is_active:
             conn.close()
             return None, "Account is deactivated"
-        
+
         # Update last login
         cursor.execute('UPDATE users SET last_login = ?, full_name = ? WHERE id = ?',
-                      (datetime.now(), full_name, user_id))
+                       (datetime.now(), full_name, user_id))
         conn.commit()
-        
+
     else:
         # Create new user
         role = 'admin' if email.endswith('@usc.edu.tt') else 'user'
@@ -110,119 +114,108 @@ def create_or_get_user(email, full_name, google_id):
             INSERT INTO users (email, full_name, role, google_id, created_at, last_login)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (email, full_name, role, google_id, datetime.now(), datetime.now()))
-        
+
         user_id = cursor.lastrowid
         conn.commit()
-    
+
     conn.close()
     return user_id, role
 
+
 # ==================== FLASK ROUTES ====================
 
-@server.route('/login')
-def login_page():
-    """Serve login page"""
-    if session.get('authenticated'):
-        return redirect('/')
-    
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>USC IR - Login</title>
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
-        <style>
-            body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #2E8B57 0%, #1B5E20 100%); }
-            .login-container { background: white; padding: 2rem; border-radius: 15px; text-align: center; max-width: 400px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
-            .status { margin-top: 1rem; padding: 0.75rem; border-radius: 8px; }
-            .status.success { background: #d4edda; color: #155724; }
-            .status.error { background: #f8d7da; color: #721c24; }
-        </style>
-    </head>
-    <body>
-        <div class="login-container">
-            <h2>🏛️ USC Institutional Research</h2>
-            <p>Sign in with your USC Google account</p>
-            <div id="g_id_signin"></div>
-            <div id="status" class="status" style="display:none;"></div>
-        </div>
-        
-        <script>
-            const CLIENT_ID = "''' + GOOGLE_CLIENT_ID + '''";
-            
-            function showStatus(message, isError = false) {
-                const status = document.getElementById('status');
-                status.textContent = message;
-                status.className = 'status ' + (isError ? 'error' : 'success');
-                status.style.display = 'block';
-            }
-            
-            async function handleCredentialResponse(response) {
-                showStatus('Authenticating...');
-                
-                try {
-                    const authResponse = await fetch('/auth/google', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ credential: response.credential })
-                    });
-                    
-                    const data = await authResponse.json();
-                    
-                    if (data.success) {
-                        showStatus('✅ Success! Redirecting...');
-                        setTimeout(() => window.location.href = '/', 1000);
-                    } else {
-                        showStatus('❌ ' + data.message, true);
-                    }
-                } catch (error) {
-                    showStatus('❌ Network error', true);
-                }
-            }
-            
-            // Initialize Google Sign-In
-            google.accounts.id.initialize({
-                client_id: CLIENT_ID,
-                callback: handleCredentialResponse
-            });
-            
-            google.accounts.id.renderButton(
-                document.getElementById("g_id_signin"),
-                { theme: "filled_blue", size: "large", width: "100%" }
-            );
-            
-            showStatus('✅ Ready to sign in');
-        </script>
-    </body>
-    </html>
-    '''
+def create_login_page():
+    """Create login page as Dash component"""
+    return html.Div([
+        dbc.Container([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H2([
+                                html.I(className="fas fa-university me-2"),
+                                "USC Institutional Research"
+                            ], className="text-center mb-3"),
+                            html.P("Sign in to access the portal", className="text-center text-muted mb-4"),
+
+                            # Simple email login for testing
+                            html.Div([
+                                html.H5("Quick Login (Testing)", className="mb-3"),
+                                dbc.InputGroup([
+                                    dbc.Input(
+                                        id="email-input",
+                                        placeholder="Enter your USC email",
+                                        type="email",
+                                        value="demo@usc.edu.tt"
+                                    ),
+                                    dbc.Button("Login", id="email-login-btn", color="success")
+                                ], className="mb-3"),
+                            ]),
+
+                            html.Hr(),
+
+                            # Google OAuth (may need configuration)
+                            html.A([
+                                dbc.Button([
+                                    html.I(className="fab fa-google me-2"),
+                                    "Sign in with Google"
+                                ], color="primary", size="lg", className="w-100")
+                            ], href="/auth/google-redirect", className="d-block mb-3"),
+
+                            # Status messages
+                            html.Div(id="login-status", className="text-center"),
+
+                            # Demo login for testing
+                            html.Hr(),
+                            html.A([
+                                dbc.Button([
+                                    html.I(className="fas fa-user me-2"),
+                                    "Demo Login (Admin)"
+                                ], color="outline-secondary", size="sm", className="w-100")
+                            ], href="/auth/demo-login"),
+
+                            # Help text
+                            html.Small([
+                                html.I(className="fas fa-info-circle me-1"),
+                                "Use any @usc.edu.tt email for admin access"
+                            ], className="text-muted d-block text-center mt-3")
+                        ])
+                    ], className="shadow-lg")
+                ], md=6, lg=4, className="mx-auto")
+            ], className="justify-content-center", style={"min-height": "80vh", "align-items": "center"})
+        ], fluid=True, style={
+            "background": "linear-gradient(135deg, #2E8B57 0%, #1B5E20 100%)",
+            "min-height": "100vh"
+        })
+    ])
+
 
 @server.route('/auth/google', methods=['POST'])
 def google_auth():
     """Handle Google OAuth"""
     if not GOOGLE_AUTH_AVAILABLE:
         return jsonify({'success': False, 'message': 'Google auth not available'})
-    
+
     try:
         credential = request.json.get('credential')
-        
+
         # Verify the token
         idinfo = id_token.verify_oauth2_token(
             credential, google_requests.Request(), GOOGLE_CLIENT_ID)
-        
+
         email = idinfo.get('email')
         name = idinfo.get('name', email)
         google_id = idinfo.get('sub')
-        
+
         if not email:
             return jsonify({'success': False, 'message': 'No email provided'})
-        
+
         # Create or get user
         user_id, role = create_or_get_user(email, name, google_id)
-        
+
         if not user_id:
             return jsonify({'success': False, 'message': role})  # role contains error message
-        
+
         # Create Flask session
         session.permanent = True
         session['authenticated'] = True
@@ -230,22 +223,31 @@ def google_auth():
         session['email'] = email
         session['full_name'] = name
         session['role'] = role
-        
+
         return jsonify({
             'success': True,
             'message': f'Welcome {name}!',
             'user': {'id': user_id, 'email': email, 'name': name, 'role': role}
         })
-        
+
     except Exception as e:
         print(f"Auth error: {e}")
         return jsonify({'success': False, 'message': 'Authentication failed'})
+
 
 @server.route('/logout')
 def logout():
     """Logout user"""
     session.clear()
     return redirect('/')
+
+
+@server.route('/api/logout', methods=['POST'])
+def api_logout():
+    """API endpoint for logout"""
+    session.clear()
+    return jsonify({'success': True, 'redirect': '/'})
+
 
 # ==================== DASH COMPONENTS ====================
 
@@ -258,7 +260,7 @@ def create_navbar(user=None):
             dbc.DropdownMenu([
                 dbc.DropdownMenuItem(f"👋 {user['full_name']}", disabled=True),
                 dbc.DropdownMenuItem(divider=True),
-                dbc.DropdownMenuItem("Logout", href="/logout")
+                dbc.DropdownMenuItem("Logout", id="logout-btn")
             ], nav=True, in_navbar=True, label="Account", className="ms-auto")
         ]
     else:
@@ -266,13 +268,14 @@ def create_navbar(user=None):
             dbc.NavItem(dbc.NavLink("About", href="/about")),
             dbc.NavItem(dbc.NavLink("Sign In", href="/login", className="btn btn-outline-light ms-2"))
         ]
-    
+
     return dbc.Navbar([
         dbc.Container([
             dbc.NavbarBrand("🏛️ USC Institutional Research", href="/"),
             dbc.Nav(nav_items, navbar=True, className="ms-auto")
         ])
     ], color="#2E8B57", dark=True, className="mb-4")
+
 
 def create_home_page():
     """Create home page"""
@@ -291,6 +294,7 @@ def create_home_page():
         ])
     ])
 
+
 # ==================== DASH APP LAYOUT ====================
 
 app.layout = html.Div([
@@ -298,6 +302,7 @@ app.layout = html.Div([
     dcc.Store(id='user-store'),
     html.Div(id='page-content')
 ])
+
 
 # ==================== DASH CALLBACKS ====================
 
@@ -310,6 +315,176 @@ def update_user_store(pathname):
     user = get_current_user()
     return user
 
+
+@app.callback(
+    Output('url', 'pathname'),
+    [Input('logout-btn', 'n_clicks')],
+    prevent_initial_call=True
+)
+def handle_logout(n_clicks):
+    """Handle logout button click"""
+    if n_clicks:
+        # Clear Flask session
+        session.clear()
+        # Redirect to home
+        return '/'
+    return dash.no_update
+
+
+@app.callback(
+    Output('login-status', 'children'),
+    [Input('url', 'search'),
+     Input('email-login-btn', 'n_clicks')],
+    [State('email-input', 'value')]
+)
+def handle_login_status(search, n_clicks, email):
+    """Handle login status and email login"""
+    ctx = callback_context
+
+    if ctx.triggered:
+        prop_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        if prop_id == 'email-login-btn' and n_clicks and email:
+            # Simple email login
+            if '@' in email:
+                # Create session
+                session.permanent = True
+                session['authenticated'] = True
+                session['user_id'] = hash(email) % 1000  # Simple ID generation
+                session['email'] = email
+                session['full_name'] = email.split('@')[0].title()
+                session['role'] = 'admin' if 'usc.edu.tt' in email else 'user'
+
+                # Redirect to home
+                return dbc.Alert([
+                    html.I(className="fas fa-check-circle me-2"),
+                    f"Welcome {email}! Redirecting...",
+                    html.Script('setTimeout(() => window.location.href = "/", 1500);')
+                ], color="success")
+            else:
+                return dbc.Alert("Please enter a valid email address.", color="warning")
+
+    # Handle URL error messages
+    if search:
+        if 'error=google_unavailable' in search:
+            return dbc.Alert("Google authentication is not available. Please contact support.", color="danger")
+        elif 'error=no_code' in search:
+            return dbc.Alert("Google authentication was cancelled.", color="warning")
+        elif 'error=token_failed' in search:
+            return dbc.Alert("Google authentication failed. Please try again.", color="danger")
+        elif 'error=no_email' in search:
+            return dbc.Alert("Could not get email from Google. Please try again.", color="danger")
+        elif 'error=user_creation_failed' in search:
+            return dbc.Alert("Account creation failed. Please contact support.", color="danger")
+        elif 'error=oauth_failed' in search:
+            return dbc.Alert("Authentication failed. Please try again.", color="danger")
+
+    return ""
+
+
+# Add a demo login for testing
+@server.route('/auth/demo-login')
+def demo_login():
+    """Demo login for testing (remove in production)"""
+    session.permanent = True
+    session['authenticated'] = True
+    session['user_id'] = 999
+    session['email'] = 'demo@usc.edu.tt'
+    session['full_name'] = 'Demo User'
+    session['role'] = 'admin'
+
+    return redirect('/')
+
+
+@server.route('/auth/google-redirect')
+def google_redirect():
+    """Redirect to Google OAuth"""
+    if not GOOGLE_AUTH_AVAILABLE:
+        return redirect('/login?error=google_unavailable')
+
+    # Properly encode the redirect URI
+    import urllib.parse
+
+    redirect_uri = "http://localhost:8050/auth/google-callback"
+
+    # Build Google OAuth URL with proper encoding
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'scope': 'email profile',
+        'response_type': 'code',
+        'access_type': 'offline'
+    }
+
+    query_string = urllib.parse.urlencode(params)
+    google_oauth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{query_string}"
+
+    print(f"🔍 Redirecting to Google OAuth: {google_oauth_url}")
+    return redirect(google_oauth_url)
+
+
+@server.route('/auth/google-callback')
+def google_callback():
+    """Handle Google OAuth callback"""
+    if not GOOGLE_AUTH_AVAILABLE:
+        return redirect('/login?error=google_unavailable')
+
+    code = request.args.get('code')
+    if not code:
+        return redirect('/login?error=no_code')
+
+    try:
+        # Exchange code for token
+        import requests as req
+
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': os.getenv('GOOGLE_CLIENT_SECRET'),
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': 'http://localhost:8050/auth/google-callback'
+        }
+
+        token_response = req.post('https://oauth2.googleapis.com/token', data=token_data)
+        token_json = token_response.json()
+
+        if 'access_token' not in token_json:
+            return redirect('/login?error=token_failed')
+
+        # Get user info
+        user_response = req.get(
+            f"https://www.googleapis.com/oauth2/v1/userinfo?access_token={token_json['access_token']}"
+        )
+        user_info = user_response.json()
+
+        email = user_info.get('email')
+        name = user_info.get('name', email)
+        google_id = user_info.get('id')
+
+        if not email:
+            return redirect('/login?error=no_email')
+
+        # Create or get user
+        user_id, role = create_or_get_user(email, name, google_id)
+
+        if not user_id:
+            return redirect('/login?error=user_creation_failed')
+
+        # Create Flask session
+        session.permanent = True
+        session['authenticated'] = True
+        session['user_id'] = user_id
+        session['email'] = email
+        session['full_name'] = name
+        session['role'] = role
+
+        return redirect('/')
+
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        return redirect('/login?error=oauth_failed')
+
+
 @app.callback(
     Output('page-content', 'children'),
     [Input('url', 'pathname'),
@@ -317,8 +492,21 @@ def update_user_store(pathname):
 )
 def display_page(pathname, user):
     """Main page router"""
+    # Handle login page specially (no navbar)
+    if pathname == '/login':
+        if user:
+            # Already logged in, redirect to home
+            return html.Div([
+                dbc.Alert("You are already logged in. Redirecting...", color="info"),
+                html.Script('setTimeout(() => window.location.href = "/", 2000);')
+            ])
+        else:
+            # Show login page
+            return create_login_page()
+
+    # For all other pages, include navbar
     navbar = create_navbar(user)
-    
+
     if pathname == '/' or pathname is None:
         content = create_home_page()
     elif pathname == '/dashboard':
@@ -338,8 +526,9 @@ def display_page(pathname, user):
         ])
     else:
         content = dbc.Alert("Page not found", color="danger")
-    
+
     return html.Div([navbar, content])
+
 
 # ==================== STARTUP ====================
 
@@ -349,5 +538,5 @@ if __name__ == '__main__':
     print("✅ Database initialized")
     print("🌐 Server running on http://localhost:8050")
     print("🔐 Login at http://localhost:8050/login")
-    
+
     app.run_server(debug=True, port=8050)
